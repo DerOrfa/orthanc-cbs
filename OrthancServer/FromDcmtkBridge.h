@@ -139,5 +139,7 @@ namespace Orthanc
                                 Encoding dicomEncoding);
 
     static DcmEVR ParseValueRepresentation(const std::string& s);
+	
+	static bool FixTags(DcmDataset &dset);
   };
 }

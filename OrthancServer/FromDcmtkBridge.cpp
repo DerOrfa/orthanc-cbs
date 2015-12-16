@@ -1566,4 +1566,16 @@ namespace Orthanc
 
     throw OrthancException(ErrorCode_ParameterOutOfRange);
   }
+	bool FromDcmtkBridge::FixTags(DcmDataset& dset)
+	{
+		OFString patID,patName;
+		bool ret=true;
+		dset.findAndGetOFString(DcmTagKey(0x0010, 0x0020),patID);
+		dset.findAndGetOFString(DcmTagKey(0x0010, 0x0010),patName);
+		if(patID=="xxxx"){
+			ret&= dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0020),patName.substr(0,4)).good();
+		}
+		ret&=dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0010),patName.substr(0,4)).good();
+		return ret;
+	}
 }

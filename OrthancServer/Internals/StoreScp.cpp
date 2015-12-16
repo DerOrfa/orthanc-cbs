@@ -167,6 +167,7 @@ namespace Orthanc
 
           try
           {
+			FromDcmtkBridge::FixTags(**imageDataSet);
             FromDcmtkBridge::Convert(summary, **imageDataSet);
             FromDcmtkBridge::ToJson(dicomJson, **imageDataSet,
                                     DicomToJsonFormat_Full, 
