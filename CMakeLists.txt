@@ -113,6 +113,7 @@ set(ORTHANC_CORE_SOURCES
   Core/HttpServer/FilesystemHttpSender.cpp
   Core/HttpServer/HttpContentNegociation.cpp
   Core/HttpServer/HttpStreamTranscoder.cpp
+  Core/HttpServer/pamuser.cpp
   Core/Logging.cpp
   Core/RestApi/RestApiCall.cpp
   Core/RestApi/RestApiGetCall.cpp
@@ -311,6 +312,7 @@ else()
   add_definitions(-DORTHANC_PLUGINS_ENABLED=0)
 endif()
 
+find_library(PAM_LIB NAMES pam pam_misc PATH ${LIBPATH})
 
 
 #####################################################################
@@ -429,7 +431,7 @@ add_executable(Orthanc
   ${ORTHANC_RESOURCES}
   )
 
-target_link_libraries(Orthanc ServerLibrary CoreLibrary ${DCMTK_LIBRARIES})
+target_link_libraries(Orthanc ServerLibrary CoreLibrary ${PAM_LIB} ${DCMTK_LIBRARIES})
 
 if (${OPENSSL_SOURCES_LENGTH} GREATER 0)
   target_link_libraries(Orthanc OpenSSL)
@@ -461,7 +463,7 @@ add_executable(UnitTests
   ${GTEST_SOURCES}
   ${ORTHANC_UNIT_TESTS_SOURCES}
   )
-target_link_libraries(UnitTests ServerLibrary CoreLibrary ${DCMTK_LIBRARIES})
+target_link_libraries(UnitTests ServerLibrary CoreLibrary ${PAM_LIB} ${DCMTK_LIBRARIES})
 
 if (${OPENSSL_SOURCES_LENGTH} GREATER 0)
   target_link_libraries(UnitTests OpenSSL)

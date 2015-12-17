@@ -83,9 +83,9 @@ namespace Orthanc
 
     IHttpHandler *handler_;
 
-    typedef std::set<std::string> RegisteredUsers;
-    RegisteredUsers registeredUsers_;
-
+	std::set<std::string> allowedUsers_;
+	std::set<std::string> allowedGroups_;
+	
     bool remoteAllowed_;
     bool authentication_;
     bool ssl_;
@@ -116,8 +116,8 @@ namespace Orthanc
 
     void ClearUsers();
 
-    void RegisterUser(const char* username,
-                      const char* password);
+    void RegisterUser(const char* username);
+	void RegisterGroup(const char* grname);
 
     bool IsAuthenticationEnabled() const
     {

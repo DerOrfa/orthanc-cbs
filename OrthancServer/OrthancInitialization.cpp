@@ -639,26 +639,41 @@ namespace Orthanc
 
     httpServer.ClearUsers();
 
-    if (!configuration_.isMember("RegisteredUsers"))
+    if (!configuration_.isMember("AllowedUsers"))
     {
       return;
     }
 
-    const Json::Value& users = configuration_["RegisteredUsers"];
-    if (users.type() != Json::objectValue)
+    const Json::Value& users = configuration_["AllowedUsers"];
+    if (users.type() != Json::arrayValue)
     {
-      LOG(ERROR) << "Badly formatted list of users";
+      LOG(ERROR) << "Badly formatted list of users"; 
       throw OrthancException(ErrorCode_BadFileFormat);
     }
 
-    Json::Value::Members usernames = users.getMemberNames();
-    for (size_t i = 0; i < usernames.size(); i++)
+    for (Json::Value::ArrayIndex i = 0; i < users.size(); i++)
     {
-      const std::string& username = usernames[i];
-      std::string password = users[username].asString();
-      httpServer.RegisterUser(username.c_str(), password.c_str());
+	  httpServer.RegisterUser(users[i].asString().c_str());
     }
-  }
+
+	  if (!configuration_.isMember("AllowedGroups"))
+	  {
+		  return;
+	  }
+	  
+	  const Json::Value& groups = configuration_["AllowedGroups"];
+	  if (groups.type() != Json::arrayValue)
+	  {
+		  LOG(ERROR) << "Badly formatted list of groups"; 
+		  throw OrthancException(ErrorCode_BadFileFormat);
+	  }
+	  
+	  for (Json::Value::ArrayIndex i = 0; i < groups.size(); i++)
+	  {
+		  httpServer.RegisterGroup(groups[i].asString().c_str());
+	  }
+	  
+}
 
 
   std::string Configuration::InterpretRelativePath(const std::string& baseDirectory,
