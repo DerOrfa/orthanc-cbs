@@ -1015,6 +1015,7 @@ int main(int argc, char* argv[])
   bool allowDatabaseUpgrade = false;
   const char* configurationFile = NULL;
 
+  umask(S_IRWXG|S_IRWXO); // nobody should access my files but me
 
   /**
    * Parse the command-line options.
