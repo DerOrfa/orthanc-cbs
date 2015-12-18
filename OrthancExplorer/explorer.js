@@ -665,29 +665,6 @@ function OpenDeleteResourceDialog(path, title)
   });
 }
 
-
-
-$('#instance-delete').live('click', function() {
-  OpenDeleteResourceDialog('../instances/' + $.mobile.pageData.uuid,
-                           'Delete this instance?');
-});
-
-$('#study-delete').live('click', function() {
-  OpenDeleteResourceDialog('../studies/' + $.mobile.pageData.uuid,
-                           'Delete this study?');
-});
-
-$('#series-delete').live('click', function() {
-  OpenDeleteResourceDialog('../series/' + $.mobile.pageData.uuid,
-                           'Delete this series?');
-});
-
-$('#patient-delete').live('click', function() {
-  OpenDeleteResourceDialog('../patients/' + $.mobile.pageData.uuid,
-                           'Delete this patient?');
-});
-
-
 $('#instance-download-dicom').live('click', function(e) {
   // http://stackoverflow.com/a/1296101
   e.preventDefault();  //stop the browser from following
