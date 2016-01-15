@@ -14,6 +14,12 @@ set(ORTHANC_VERSION "mainline")
 #   * Orthanc 0.9.5 -> mainline      = version 6
 set(ORTHANC_DATABASE_VERSION 6)
 
+find_package(ISIS)
+
+ADD_DEFINITIONS(-D_ENABLE_LOG=1)
+ADD_DEFINITIONS(-D_ENABLE_DEBUG=0)
+INCLUDE_DIRECTORIES(${ISIS_INCLUDE_DIRS})
+
 
 #####################################################################
 ## CMake parameters tunable at the command line
@@ -431,7 +437,7 @@ add_executable(Orthanc
   ${ORTHANC_RESOURCES}
   )
 
-target_link_libraries(Orthanc ServerLibrary CoreLibrary ${PAM_LIB} ${DCMTK_LIBRARIES})
+target_link_libraries(Orthanc ServerLibrary CoreLibrary ${ISIS_LIB} ${PAM_LIB} ${DCMTK_LIBRARIES})
 
 if (${OPENSSL_SOURCES_LENGTH} GREATER 0)
   target_link_libraries(Orthanc OpenSSL)
@@ -463,7 +469,7 @@ add_executable(UnitTests
   ${GTEST_SOURCES}
   ${ORTHANC_UNIT_TESTS_SOURCES}
   )
-target_link_libraries(UnitTests ServerLibrary CoreLibrary ${PAM_LIB} ${DCMTK_LIBRARIES})
+target_link_libraries(UnitTests ServerLibrary CoreLibrary ${ISIS_LIB} ${PAM_LIB} ${DCMTK_LIBRARIES})
 
 if (${OPENSSL_SOURCES_LENGTH} GREATER 0)
   target_link_libraries(UnitTests OpenSSL)

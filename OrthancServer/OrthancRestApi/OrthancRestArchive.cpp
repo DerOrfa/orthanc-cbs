@@ -41,6 +41,8 @@
 #include "../../Core/Uuid.h"
 #include "../ServerContext.h"
 
+#include <DataStorage/io_factory.hpp>
+
 #include <stdio.h>
 
 #if defined(_MSC_VER)
@@ -69,9 +71,12 @@ namespace Orthanc
     const bool isZip64 = (uncompressedSize >= 2 * GIGA_BYTES - SAFETY_MARGIN ||
                           countInstances >= 65535);
 
-    LOG(INFO) << "Creating a ZIP file with " << countInstances << " files of size "
+#warning fixme (isis-log and orthanc log are in conflict)
+//    LOG(INFO) 
+    std::clog << "Creating a ZIP file with " << countInstances << " files of size "
               << (uncompressedSize / MEGA_BYTES) << "MB using the "
-              << (isZip64 ? "ZIP64" : "ZIP32") << " file format";
+              << (isZip64 ? "ZIP64" : "ZIP32") << " file format" 
+              << std::endl;
 
     return isZip64;
   }
@@ -667,6 +672,116 @@ namespace Orthanc
         // The temporary file is automatically removed thanks to the RAII
       }
     };
+
+    class IsisWriterVisitor : public IArchiveVisitor
+    {
+    private:
+      Toolbox::TemporaryFile    &file;
+      ServerContext&            context_;
+      std::list<isis::data::Chunk> chunks;
+
+      static std::string GetTag(const DicomMap& tags,
+                                const DicomTag& tag)
+      {
+        const DicomValue* v = tags.TestAndGetValue(tag);
+        if (v != NULL &&
+            !v->IsBinary() &&
+            !v->IsNull())
+        {
+          return v->GetContent();
+        }
+        else
+        {
+          return "";
+        }
+      }
+
+    public:
+      IsisWriterVisitor(Toolbox::TemporaryFile &dst_file,ServerContext& context) :
+        file(dst_file),
+        context_(context)
+      {}
+      std::string GenName(std::string publicId)
+      {
+        std::string path;
+
+        DicomMap tags;
+        if (context_.GetIndex().GetMainDicomTags(tags, publicId, ResourceType_Series, ResourceType_Series))
+        {
+          path = std::string("S")+ GetTag(tags,DicomTag(0x0020,0x0011)) +
+            GetTag(tags, DICOM_TAG_SERIES_INSTANCE_UID) + "_" + 
+            GetTag(tags, DICOM_TAG_PATIENT_NAME) + "_" + 
+            GetTag(tags, DICOM_TAG_STUDY_DESCRIPTION);
+        }
+
+        path = Toolbox::StripSpaces(Toolbox::ConvertToAscii(path));
+
+        if (path.empty())
+        {
+          path = std::string("Unknown ");
+        }
+        return path;
+      }
+
+      virtual void Open(ResourceType level, const std::string& publicId)
+      {
+        //@todo maybe determine file name
+      }
+
+      virtual void Close(){}
+      std::string WriteImage(const std::string &filename,const std::string &suffix){
+        isis::data::Image image(chunks);
+        if(!isis::data::IOFactory::write(image,filename,suffix.c_str()))
+          std::cerr << "Failed to write " << filename << " as " << suffix << std::endl;
+        std::string name=
+          image.getPropertyAs<std::string>("subjectName")+"_"+
+          "S"+image.getPropertyAs<std::string>("sequenceNumber")+"_"+          
+          image.getPropertyAs<std::string>("sequenceDescription")+
+          "."+suffix;
+        return Toolbox::StripSpaces(Toolbox::ConvertToAscii(name));
+      }
+
+      virtual void AddInstance(const std::string& instanceId,
+                               const FileInfo& dicom)
+      {
+        std::string content;
+        Toolbox::TemporaryFile tmp;
+        {
+          std::ofstream stream(tmp.GetPath().c_str());
+          context_.ReadFile(content, dicom);
+          stream << content;
+        }
+        if(isis::data::IOFactory::load(chunks,tmp.GetPath(),"dcm")<1){
+          std::cerr << "Failed to load " << dicom.GetUuid() << " in isis" << std::endl;
+        }
+      }
+
+      static void Apply(RestApiOutput& output,
+                        ServerContext& context,
+                        ArchiveIndex& archive,
+                        const std::string& suffix)
+      {
+        archive.Expand(context.GetIndex());
+
+        Toolbox::TemporaryFile tmp;
+        std::string filename;
+        {
+          IsisWriterVisitor v(tmp,context);
+          archive.Apply(v);
+          filename=v.WriteImage(tmp.GetPath(),suffix);
+        }
+
+        FilesystemHttpSender sender(tmp.GetPath());
+        sender.SetContentType("application/x-nifti");
+        sender.SetContentFilename(filename);
+
+        // Send the ZIP
+        output.AnswerStream(sender);
+
+        // The temporary file is automatically removed thanks to the RAII
+      }
+    };
+
   }
 
 
@@ -760,7 +875,24 @@ namespace Orthanc
                               id + ".zip");
   }
 
-
+  static void CreateIsis(RestApiGetCall& call)
+  {
+    ServerIndex& index = OrthancRestApi::GetIndex(call);
+    
+    std::string id = call.GetUriComponent("id", "");
+    std::string format = call.GetUriComponent("format", "");
+    
+    ResourceIdentifiers resource(index, id);
+    
+    ArchiveIndex archive(ResourceType_Patient);  // root
+    archive.Add(OrthancRestApi::GetIndex(call), resource);
+    
+    IsisWriterVisitor::Apply(call.GetOutput(),
+                                OrthancRestApi::GetContext(call),
+                                archive,
+                                format);
+  }
+  
   void OrthancRestApi::RegisterArchive()
   {
     Register("/patients/{id}/archive", CreateArchive);
@@ -773,5 +905,6 @@ namespace Orthanc
 
     Register("/tools/create-archive", CreateBatchArchive);
     Register("/tools/create-media", CreateBatchMedia);
+    Register("/series/{id}/isis/{format}", CreateIsis);
   }
 }

@@ -898,6 +898,11 @@ $('#series-archive').live('click', function(e) {
   window.location.href = '../series/' + $.mobile.pageData.uuid + '/archive';
 });
 
+$('#series-nifti').live('click', function(e) {
+	e.preventDefault();  //stop the browser from following
+	window.location.href = '../series/' + $.mobile.pageData.uuid + '/isis/nii';
+});
+
 
 $('#patient-media').live('click', function(e) {
   e.preventDefault();  //stop the browser from following
