@@ -28,13 +28,11 @@
 class PamUser : boost::noncopyable{
 	pam_handle_t *m_auth_handle;
 	pam_conv m_conversation;
-	int m_status;
 	std::string m_username;
 	static int function_conversation(int num_msg, const pam_message **msg, pam_response **resp, void *appdata_ptr);
 public:
 	PamUser(const std::string &username);
 	bool auth(const std::string &password);
-	bool good();
 	bool hasGroup(const std::set< std::string >& lookup);
 	~PamUser();
 };

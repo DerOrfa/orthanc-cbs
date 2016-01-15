@@ -1002,7 +1002,7 @@ namespace Orthanc
 		if(token!=std::string::npos){
 			const std::string username=result.substr(0,token);
 			PamUser user(username);
-			if(user.good() && user.auth(result.substr(token+1))){ // user is at least valid
+			if(user.auth(result.substr(token+1))){ // user is at least valid
 				if(allowedUsers_.find(username) != allowedUsers_.end()) // and in the list of the valid users
 					return true;
 				else if(user.hasGroup(allowedGroups_)); // in one of the valid groups

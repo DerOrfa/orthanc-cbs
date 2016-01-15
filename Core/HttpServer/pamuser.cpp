@@ -26,7 +26,6 @@
 
 int PamUser::function_conversation(int num_msg, const pam_message** msg, pam_response** resp, void* appdata_ptr){
 	*resp = (struct pam_response *)malloc(sizeof(pam_response));
-	
 	(*resp)->resp = (char*)appdata_ptr;
 	(*resp)->resp_retcode = 0;
 	return PAM_SUCCESS;
@@ -34,16 +33,16 @@ int PamUser::function_conversation(int num_msg, const pam_message** msg, pam_res
 
 PamUser::PamUser(const std::string &username):m_auth_handle(NULL),m_username(username){
 	m_conversation.conv = function_conversation;
-	m_conversation.appdata_ptr=NULL;
-	m_status= pam_start("su", username.c_str(), &m_conversation, &m_auth_handle);
-	if (!good())
-		LOG(ERROR) << "Failed to initialize pam";
 }
 
 
 bool PamUser::auth(const std::string &password){
-	m_conversation.appdata_ptr=const_cast<char*>(password.c_str());
-	m_status = pam_authenticate(m_auth_handle, 0);
+	m_conversation.appdata_ptr=malloc(password.size()+1);
+	strcpy((char*)m_conversation.appdata_ptr,password.c_str());
+	int m_status=pam_start("su", m_username.c_str(), &m_conversation, &m_auth_handle);
+	if(m_status==PAM_SUCCESS){
+		m_status = pam_authenticate(m_auth_handle, 0);
+	}
 	if (m_status != PAM_SUCCESS)	{
 		if (m_status == PAM_AUTH_ERR)
 			LOG(WARNING) << "Authentication failure for " << m_username;
@@ -66,8 +65,6 @@ bool PamUser::auth(const std::string &password){
 	} else 
 		return pam_acct_mgmt(m_auth_handle, 0)==PAM_SUCCESS;
 }
-
-bool PamUser::good(){return m_status==PAM_SUCCESS;}
 
 bool PamUser::hasGroup(const std::set< std::string >& lookup){
 	passwd* pw=getpwnam(m_username.c_str());
@@ -98,5 +95,6 @@ bool PamUser::hasGroup(const std::set< std::string >& lookup){
 }
 
 PamUser::~PamUser(){
+	int m_status;
 	pam_end(m_auth_handle, m_status);
 }
