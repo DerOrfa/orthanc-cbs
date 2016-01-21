@@ -96,6 +96,11 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <dcmtk/dcmdata/dcostrmb.h>
 
+struct _ImageGroup{
+  std::list<boost::regex> masks;
+  std::string formatting_name,formatting_id;
+};
+static std::map<std::string,_ImageGroup> _image_groups;
 
 namespace Orthanc
 {
@@ -287,6 +292,49 @@ namespace Orthanc
       locker->addEntry(entry.release());
     }
   }
+
+  /**
+   * Registers image groups based on the configuration.
+   * This expects an JsonObject of the following format in the configuration
+   * \code
+   * "Probands":{
+   *   "masks":["([A-Z]{2}[A-Z0-9][TX])(?:[0-9]{6})?"],
+   *   "formatting_name":"$1",
+   *   "formatting_id":"$1"
+   * }
+   * \endcode
+   * "formatting_name" and "formatting_id" will replace the PatientName and PatientID in the dicom.
+   * They will default to "$1" if ommited
+   */  
+  void FromDcmtkBridge::RegisterImageGroups(const Json::Value& configuration)
+  {
+    _image_groups.clear();
+    if (configuration.type() != Json::objectValue ||
+      !configuration.isMember("ImageGroups") ||
+      configuration["ImageGroups"].type() != Json::objectValue)
+    {
+      return;
+    }
+    Json::Value::Members groups=configuration["ImageGroups"].getMemberNames();
+    for(Json::Value::Members::iterator i_gr=groups.begin();
+        i_gr!=groups.end();i_gr++)
+    {
+      const Json::Value &group= configuration["ImageGroups"][*i_gr];
+      if(group.isMember("masks") && group["masks"].size()>=1){
+        for(Json::ValueConstIterator i=group["masks"].begin();i!=group["masks"].end();i++){
+          _image_groups[*i_gr].masks.push_back(boost::regex((*i).asCString()));
+
+          _image_groups[*i_gr].formatting_name=group.isMember("formatting_name") ?
+            group["formatting_name"].asCString():"$1";
+            
+          _image_groups[*i_gr].formatting_id=group.isMember("formatting_id") ?
+            group["formatting_id"].asCString():"$1";
+        }
+      } else 
+        LOG(WARNING) << "Image group \"" << *i_gr << "\" has no mask, and is therefore invalid";
+    }
+  }
+
 
 
   Encoding FromDcmtkBridge::DetectEncoding(DcmDataset& dataset)
@@ -1566,16 +1614,28 @@ namespace Orthanc
 
     throw OrthancException(ErrorCode_ParameterOutOfRange);
   }
-	bool FromDcmtkBridge::FixTags(DcmDataset& dset)
-	{
-		OFString patID,patName;
-		bool ret=true;
-		dset.findAndGetOFString(DcmTagKey(0x0010, 0x0020),patID);
-		dset.findAndGetOFString(DcmTagKey(0x0010, 0x0010),patName);
-		if(patID=="xxxx"){
-			ret&= dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0020),patName.substr(0,4)).good();
-		}
-		ret&=dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0010),patName.substr(0,4)).good();
-		return ret;
-	}
+  bool FromDcmtkBridge::FixTags(DcmDataset& dset)
+  {
+    OFString patID,studyDate;
+    dset.findAndGetOFString(DcmTagKey(0x0010, 0x0020),patID);
+    dset.findAndGetOFString(DcmTagKey(0x0008, 0x0020),studyDate);
+    boost::cmatch what;
+    
+    for(std::map<std::string,_ImageGroup>::const_iterator i=_image_groups.begin();i!=_image_groups.end();i++){
+      const std::string &name=i->first;
+      const _ImageGroup &group=i->second;
+      for(std::list<boost::regex>::const_iterator r=group.masks.begin();r!=group.masks.end();r++){
+        if(boost::regex_match(patID.begin(),patID.end(), what, *r)){
+          LOG(INFO) << "PatientID " << patID << " matched group " << name;
+          const OFString newID=what.format(group.formatting_id).c_str();
+          const OFString newName=newID+studyDate.substr(2);
+          
+          bool good= (newID==patID) || dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0020),newID).good();
+          good= dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0010),newName).good();
+          return good;
+        }
+      }
+    }
+    return dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0020),OFString("unmatched")).good(); //fallback to "fail-storage"
+  }
 }

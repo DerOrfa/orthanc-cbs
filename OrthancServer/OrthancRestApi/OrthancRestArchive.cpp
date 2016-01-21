@@ -36,9 +36,11 @@
 #include "../DicomDirWriter.h"
 #include "../../Core/FileStorage/StorageAccessor.h"
 #include "../../Core/Compression/HierarchicalZipWriter.h"
+#include "../../Core/Compression/TarStreamWriter.h"
 #include "../../Core/HttpServer/FilesystemHttpSender.h"
 #include "../../Core/Logging.h"
 #include "../../Core/Uuid.h"
+#include "../../OrthancServer/OrthancInitialization.h"
 #include "../ServerContext.h"
 
 #include <DataStorage/io_factory.hpp>
@@ -576,6 +578,131 @@ namespace Orthanc
     };
 
     
+    class SftpArchiveWriterVisitor : public IArchiveVisitor
+    {
+    private:
+      TarStreamWriter&  writer_;
+      ServerContext&            context_;
+      char                    instanceFormat_[24];
+      unsigned int            countInstances_;
+
+      static std::string GetTag(const DicomMap& tags,
+                                const DicomTag& tag)
+      {
+        const DicomValue* v = tags.TestAndGetValue(tag);
+        if (v != NULL &&
+            !v->IsBinary() &&
+            !v->IsNull())
+        {
+          return v->GetContent();
+        }
+        else
+        {
+          return "";
+        }
+      }
+
+    public:
+      SftpArchiveWriterVisitor(TarStreamWriter& writer, ServerContext& context) :
+        writer_(writer),
+        context_(context),
+        countInstances_(0)
+      {
+        snprintf(instanceFormat_, sizeof(instanceFormat_) - 1, "%%08d.dcm");
+      }
+
+      virtual void Open(ResourceType level, const std::string& publicId)
+      {
+        std::string path;
+
+        DicomMap tags;
+        if (context_.GetIndex().GetMainDicomTags(tags, publicId, level, level))
+        {
+          switch (level)
+          {
+            case ResourceType_Patient:
+              path = GetTag(tags, DICOM_TAG_PATIENT_ID);
+              break;
+
+            case ResourceType_Study:
+              path = GetTag(tags, DICOM_TAG_STUDY_DATE).substr(2)+"_"+GetTag(tags, DICOM_TAG_STUDY_TIME);
+              break;
+
+            case ResourceType_Series:
+            {
+              path = std::string("S")+ GetTag(tags,DicomTag(0x0020,0x0011)) + "_" + GetTag(tags, DICOM_TAG_SERIES_DESCRIPTION);
+              break;
+            }
+
+            default:
+              throw OrthancException(ErrorCode_InternalError);
+          }
+        }
+        
+        static const char forbidden[]="/ ";
+        path = Toolbox::StripSpaces(Toolbox::ConvertToAscii(path));
+        for(std::string::size_type found=path.find_first_of(forbidden);
+            found!=std::string::npos;
+            found=path.find_first_of(forbidden,found)
+        ){
+            path.replace(found,1,"_");
+        }
+
+        if (path.empty())
+        {
+          path = std::string("Unknown ") + EnumerationToString(level);
+        }
+
+        writer_.OpenDirectory(path.c_str());
+      }
+
+      virtual void Close()
+      {
+        writer_.CloseDirectory();
+      }
+
+      virtual void AddInstance(const std::string& instanceId, const FileInfo& dicom)
+      {
+        std::string content;
+        context_.ReadFile(content, dicom);
+
+        char filename[24];
+        snprintf(filename, sizeof(filename) - 1, instanceFormat_, countInstances_);
+        countInstances_ ++;
+
+        writer_.AddFile(filename,content);
+      }
+
+      static void Apply(RestApiOutput& output, ServerContext& context,
+                        ArchiveIndex& archive, const std::string& filename)
+      {
+        
+        Json::Value configuration;
+        Configuration::GetConfiguration(configuration);
+        
+        const std::string placeholder="{}";
+        std::string cmd=configuration["sftp-command"].asString();
+        for(std::string::size_type found=cmd.find(placeholder);
+            found!=std::string::npos;
+            found=cmd.find(placeholder)
+        ){
+            cmd.replace(found,placeholder.length(),filename);
+        }
+
+
+        archive.Expand(context.GetIndex());
+
+        {
+          // Create a ZIP writer
+          TarStreamWriter writer(cmd);
+          SftpArchiveWriterVisitor v(writer, context);
+          archive.Apply(v);
+        }
+
+        output.AnswerJson(Json::Value());
+      }
+    };
+
     class MediaWriterVisitor : public IArchiveVisitor
     {
     private:
@@ -858,6 +985,41 @@ namespace Orthanc
                                 id + ".zip");
   }
 
+  static void CreateSftpArchive(RestApiGetCall& call)
+  {
+    ServerIndex& index = OrthancRestApi::GetIndex(call);
+
+    std::string id = call.GetUriComponent("id", "");
+    ResourceIdentifiers resource(index, id);
+    
+            
+    DicomMap tags;
+    std::string filename;
+    ServerIndex &idx=OrthancRestApi::GetContext(call).GetIndex();
+    Orthanc::ResourceType rs_type;
+    idx.LookupResourceType(rs_type,id);
+    
+    if (rs_type>=Orthanc::ResourceType_Patient && idx.GetMainDicomTags(tags, id, rs_type, ResourceType_Patient)){
+      filename=
+        tags.GetValue(DICOM_TAG_PATIENT_ID).GetContent();
+      if(rs_type>=Orthanc::ResourceType_Study && idx.GetMainDicomTags(tags, id, rs_type, ResourceType_Study)){
+        filename+=
+          tags.GetValue(DICOM_TAG_STUDY_DATE).GetContent().substr(2)+"_"+
+          tags.GetValue(DICOM_TAG_STUDY_TIME).GetContent();
+      }
+    } else {
+      filename=id;
+    }
+
+
+
+    ArchiveIndex archive(ResourceType_Patient);  // root
+    archive.Add(OrthancRestApi::GetIndex(call), resource);
+
+    SftpArchiveWriterVisitor::Apply(call.GetOutput(),
+                                OrthancRestApi::GetContext(call),
+                                archive,filename);
+  }
 
   static void CreateMedia(RestApiGetCall& call)
   {
@@ -898,6 +1060,10 @@ namespace Orthanc
     Register("/patients/{id}/archive", CreateArchive);
     Register("/studies/{id}/archive", CreateArchive);
     Register("/series/{id}/archive", CreateArchive);
+
+    Register("/patients/{id}/sftp-archive", CreateSftpArchive);
+    Register("/studies/{id}/sftp-archive", CreateSftpArchive);
+    Register("/series/{id}/sftp-archive", CreateSftpArchive);
 
     Register("/patients/{id}/media", CreateMedia);
     Register("/studies/{id}/media", CreateMedia);

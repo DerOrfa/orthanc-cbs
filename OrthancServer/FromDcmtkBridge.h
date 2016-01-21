@@ -39,6 +39,7 @@
 #include <dcmtk/dcmdata/dcdatset.h>
 #include <dcmtk/dcmdata/dcmetinf.h>
 #include <json/json.h>
+#include <boost/regex.hpp>
 
 namespace Orthanc
 {
@@ -52,6 +53,8 @@ namespace Orthanc
                                       const std::string& name,
                                       unsigned int minMultiplicity,
                                       unsigned int maxMultiplicity);
+    
+    static void RegisterImageGroups(const Json::Value& configuration);
 
     static Encoding DetectEncoding(DcmDataset& dataset);
 
