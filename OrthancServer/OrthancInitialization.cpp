@@ -415,6 +415,8 @@ namespace Orthanc
 
     FromDcmtkBridge::InitializeDictionary();
     LoadCustomDictionary(configuration_);
+    
+    FromDcmtkBridge::RegisterImageGroups(configuration_);
 
 #if ORTHANC_JPEG_LOSSLESS_ENABLED == 1
     LOG(WARNING) << "Registering JPEG Lossless codecs";
