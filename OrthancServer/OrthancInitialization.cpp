@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
  * Department, University Hospital of Liege, Belgium
@@ -135,10 +135,11 @@ namespace Orthanc
 
       Json::Value tmp;
       Json::Reader reader;
+
       if (!reader.parse(content, tmp) ||
           tmp.type() != Json::objectValue)
       {
-        LOG(ERROR) << "The configuration file does not follow the JSON syntax: " << path;
+        LOG(ERROR) << "Failed to parse " << path << " " << reader.getFormatedErrorMessages();
         throw OrthancException(ErrorCode_BadJson);
       }
 

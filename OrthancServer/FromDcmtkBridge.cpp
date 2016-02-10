@@ -1,3 +1,5 @@
+﻿// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
+
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -28,8 +30,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  **/
-
-
 
 #include "PrecompiledHeadersServer.h"
 
@@ -95,6 +95,7 @@
 #include <boost/math/special_functions/round.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <dcmtk/dcmdata/dcostrmb.h>
+#include <dcmtk/dcmdata/dcostrmf.h>
 
 struct _ImageGroup{
   std::list<boost::regex> masks;
@@ -337,14 +338,14 @@ namespace Orthanc
 
 
 
-  Encoding FromDcmtkBridge::DetectEncoding(DcmDataset& dataset)
+  Encoding FromDcmtkBridge::DetectEncoding(const DcmDataset& dataset)
   {
     // By default, Latin1 encoding is assumed
     std::string s = Configuration::GetGlobalStringParameter("DefaultEncoding", "Latin1");
     Encoding encoding = s.empty() ? Encoding_Latin1 : StringToEncoding(s.c_str());
 
-    OFString tmp;
-    if (dataset.findAndGetOFString(DCM_SpecificCharacterSet, tmp).good())
+    OFString tmp; //findAndGetOFString is not const - no idea why
+    if (const_cast<DcmDataset&>(dataset).findAndGetOFString(DCM_SpecificCharacterSet, tmp).good())
     {
       std::string characterSet = Toolbox::StripSpaces(std::string(tmp.c_str()));
 
@@ -372,14 +373,14 @@ namespace Orthanc
   }
 
 
-  void FromDcmtkBridge::Convert(DicomMap& target, DcmDataset& dataset)
+  void FromDcmtkBridge::Convert(Orthanc::DicomMap& target, const DcmDataset& dataset)
   {
     Encoding encoding = DetectEncoding(dataset);
 
     target.Clear();
     for (unsigned long i = 0; i < dataset.card(); i++)
     {
-      DcmElement* element = dataset.getElement(i);
+      const DcmElement* element = const_cast<DcmDataset&>(dataset).getElement(i);
       if (element && element->isLeaf())
       {
         target.SetValue(element->getTag().getGTag(),
@@ -402,7 +403,7 @@ namespace Orthanc
   }
 
 
-  DicomValue* FromDcmtkBridge::ConvertLeafElement(DcmElement& element,
+  DicomValue* FromDcmtkBridge::ConvertLeafElement(const DcmElement& element,
                                                   DicomToJsonFlags flags,
                                                   Encoding encoding)
   {
@@ -414,7 +415,7 @@ namespace Orthanc
 
     char *c = NULL;
     if (element.isaString() &&
-        element.getString(c).good())
+        const_cast<DcmElement&>(element).getString(c).good())
     {
       if (c == NULL)  // This case corresponds to the empty string
       {
@@ -472,9 +473,9 @@ namespace Orthanc
           if (!(flags & DicomToJsonFlags_ConvertBinaryToNull))
           {
             Uint8* data = NULL;
-            if (element.getUint8Array(data) == EC_Normal)
+            if (const_cast<DcmElement&>(element).getUint8Array(data) == EC_Normal)
             {
-              return new DicomValue(reinterpret_cast<const char*>(data), element.getLength(), true);
+              return new DicomValue(reinterpret_cast<const char*>(data), const_cast<DcmElement&>(element).getLength(), true);
             }
           }
 
@@ -488,7 +489,7 @@ namespace Orthanc
         case EVR_SL:  // signed long
         {
           Sint32 f;
-          if (dynamic_cast<DcmSignedLong&>(element).getSint32(f).good())
+          if (dynamic_cast<DcmSignedLong&>(const_cast<DcmElement&>(element)).getSint32(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -497,7 +498,7 @@ namespace Orthanc
         case EVR_SS:  // signed short
         {
           Sint16 f;
-          if (dynamic_cast<DcmSignedShort&>(element).getSint16(f).good())
+          if (dynamic_cast<DcmSignedShort&>(const_cast<DcmElement&>(element)).getSint16(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -506,7 +507,7 @@ namespace Orthanc
         case EVR_UL:  // unsigned long
         {
           Uint32 f;
-          if (dynamic_cast<DcmUnsignedLong&>(element).getUint32(f).good())
+          if (dynamic_cast<DcmUnsignedLong&>(const_cast<DcmElement&>(element)).getUint32(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -515,7 +516,7 @@ namespace Orthanc
         case EVR_US:  // unsigned short
         {
           Uint16 f;
-          if (dynamic_cast<DcmUnsignedShort&>(element).getUint16(f).good())
+          if (dynamic_cast<DcmUnsignedShort&>(const_cast<DcmElement&>(element)).getUint16(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -524,7 +525,7 @@ namespace Orthanc
         case EVR_FL:  // float single-precision
         {
           Float32 f;
-          if (dynamic_cast<DcmFloatingPointSingle&>(element).getFloat32(f).good())
+          if (dynamic_cast<DcmFloatingPointSingle&>(const_cast<DcmElement&>(element)).getFloat32(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -533,7 +534,7 @@ namespace Orthanc
         case EVR_FD:  // float double-precision
         {
           Float64 f;
-          if (dynamic_cast<DcmFloatingPointDouble&>(element).getFloat64(f).good())
+          if (dynamic_cast<DcmFloatingPointDouble&>(const_cast<DcmElement&>(element)).getFloat64(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -547,7 +548,7 @@ namespace Orthanc
         case EVR_AT:
         {
           DcmTagKey tag;
-          if (dynamic_cast<DcmAttributeTag&>(element).getTagVal(tag, 0).good())
+          if (dynamic_cast<DcmAttributeTag&>(const_cast<DcmElement&>(element)).getTagVal(tag, 0).good())
           {
             DicomTag t(tag.getGroup(), tag.getElement());
             return new DicomValue(t.Format(), false);
@@ -609,7 +610,7 @@ namespace Orthanc
 
 
   static Json::Value& PrepareNode(Json::Value& parent,
-                                  DcmElement& element,
+                                  const DcmElement& element,
                                   DicomToJsonFormat format)
   {
     assert(parent.type() == Json::objectValue);
@@ -747,7 +748,7 @@ namespace Orthanc
 
 
   static void DatasetToJson(Json::Value& parent,
-                            DcmItem& item,
+                            const DcmItem& item,
                             DicomToJsonFormat format,
                             DicomToJsonFlags flags,
                             unsigned int maxStringLength,
@@ -755,7 +756,7 @@ namespace Orthanc
 
 
   void FromDcmtkBridge::ToJson(Json::Value& parent,
-                               DcmElement& element,
+                               const DcmElement& element,
                                DicomToJsonFormat format,
                                DicomToJsonFlags flags,
                                unsigned int maxStringLength,
@@ -782,7 +783,7 @@ namespace Orthanc
       // "All subclasses of DcmElement except for DcmSequenceOfItems
       // are leaf nodes, while DcmSequenceOfItems, DcmItem, DcmDataset
       // etc. are not." The following dynamic_cast is thus OK.
-      DcmSequenceOfItems& sequence = dynamic_cast<DcmSequenceOfItems&>(element);
+      DcmSequenceOfItems& sequence = dynamic_cast<DcmSequenceOfItems&>(const_cast<DcmElement&>(element));
 
       for (unsigned long i = 0; i < sequence.card(); i++)
       {
@@ -795,7 +796,7 @@ namespace Orthanc
 
 
   static void DatasetToJson(Json::Value& parent,
-                            DcmItem& item,
+                            const DcmItem& item,
                             DicomToJsonFormat format,
                             DicomToJsonFlags flags,
                             unsigned int maxStringLength,
@@ -805,7 +806,7 @@ namespace Orthanc
 
     for (unsigned long i = 0; i < item.card(); i++)
     {
-      DcmElement* element = item.getElement(i);
+      const DcmElement* element = const_cast<DcmItem&>(item).getElement(i);
       if (element == NULL)
       {
         throw OrthancException(ErrorCode_InternalError);
@@ -849,11 +850,7 @@ namespace Orthanc
   }
 
 
-  void FromDcmtkBridge::ToJson(Json::Value& target, 
-                               DcmDataset& dataset,
-                               DicomToJsonFormat format,
-                               DicomToJsonFlags flags,
-                               unsigned int maxStringLength)
+  void FromDcmtkBridge::ToJson(Json::Value& target, const DcmDataset& dataset, Orthanc::DicomToJsonFormat format, Orthanc::DicomToJsonFlags flags, unsigned int maxStringLength)
   {
     target = Json::objectValue;
     DatasetToJson(target, dataset, format, flags, maxStringLength, DetectEncoding(dataset));
@@ -1057,7 +1054,7 @@ namespace Orthanc
   }
 
   bool FromDcmtkBridge::SaveToMemoryBuffer(std::string& buffer,
-                                           DcmDataset& dataSet)
+                                           const DcmDataset& dataSet)
   {
     // Determine the transfer syntax which shall be used to write the
     // information to the file. We always switch to the Little Endian
@@ -1083,23 +1080,21 @@ namespace Orthanc
     E_EncodingType encodingType = /*opt_sequenceType*/ EET_ExplicitLength;
 
     // Create the meta-header information
-    DcmFileFormat ff(&dataSet);
-    ff.validateMetaInfo(xfer);
-    ff.removeInvalidGroups();
+    DcmFileFormat ff(const_cast<DcmDataset*>(&dataSet));
 
     // Create a memory buffer with the proper size
     {
-      const uint32_t estimatedSize = ff.calcElementLength(xfer, encodingType);  // (*)
+      // unknown tags cannot be estimated @Todo get a better estimation
+      const uint32_t estimatedSize = ff.calcElementLength(xfer, encodingType)*1.3;  // (*)
       buffer.resize(estimatedSize);
     }
 
     DcmOutputBufferStream ob(&buffer[0], buffer.size());
+//     DcmOutputFileStream ob("/tmp/delme.ima");
 
     // Fill the memory buffer with the meta-header and the dataset
     ff.transferInit();
-    OFCondition c = ff.write(ob, xfer, encodingType, NULL,
-                             /*opt_groupLength*/ EGL_recalcGL,
-                             /*opt_paddingType*/ EPD_withoutPadding);
+    OFCondition c = ff.write(ob, xfer, encodingType, NULL);
     ff.transferEnd();
 
     if (c.good())
@@ -1119,6 +1114,7 @@ namespace Orthanc
     else
     {
       // Error
+      LOG(ERROR) << "Failed to save dicom to buffer:" << c.text();
       buffer.clear();
       return false;
     }
