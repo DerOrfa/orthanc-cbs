@@ -97,10 +97,21 @@
 #include <dcmtk/dcmdata/dcostrmb.h>
 #include <dcmtk/dcmdata/dcostrmf.h>
 
+struct _TagReplacer{
+  boost::regex mask;
+  std::string formatting;
+  DcmTagKey src,dst;
+};
 struct _ImageGroup{
   std::list<boost::regex> masks;
-  std::string formatting_name,formatting_id;
+  std::list<_TagReplacer> replacer;
+  DcmTagKey tag;
+
 };
+DcmTagKey json2dcmtag(const Json::Value &val){
+  return DcmTagKey(val[0].asUInt(),val[1].asUInt());
+}
+
 static std::map<std::string,_ImageGroup> _image_groups;
 
 namespace Orthanc
@@ -298,10 +309,15 @@ namespace Orthanc
    * Registers image groups based on the configuration.
    * This expects an JsonObject of the following format in the configuration
    * \code
-   * "Probands":{
-   *   "masks":["([A-Z]{2}[A-Z0-9][TX])(?:[0-9]{6})?"],
-   *   "formatting_name":"$1",
-   *   "formatting_id":"$1"
+   * "ImageGroups":{
+   *    "Probands":{
+   *        "masktag" : [16, 16],
+   *        "masks":["[A-Z]{2}[A-Z0-9][TX](?:[0-9]{6})?"],
+   *        "replace" : [
+   *            [[16, 16],"([A-Z]{2}[A-Z0-9][TX])(?:[0-9]{6})?","$1_"],
+   *            [[16,16384],".*",[56,16],"$&"]
+   *        ]
+   *    }
    * }
    * \endcode
    * "formatting_name" and "formatting_id" will replace the PatientName and PatientID in the dicom.
@@ -320,19 +336,40 @@ namespace Orthanc
     for(Json::Value::Members::iterator i_gr=groups.begin();
         i_gr!=groups.end();i_gr++)
     {
-      const Json::Value &group= configuration["ImageGroups"][*i_gr];
-      if(group.isMember("masks") && group["masks"].size()>=1){
-        for(Json::ValueConstIterator i=group["masks"].begin();i!=group["masks"].end();i++){
-          _image_groups[*i_gr].masks.push_back(boost::regex((*i).asCString()));
+      const Json::Value &group_cfg= configuration["ImageGroups"][*i_gr];
+      _ImageGroup &group=_image_groups[*i_gr];
+      if(group_cfg.isMember("masks")){
+        for(Json::ValueConstIterator i_mask=group_cfg["masks"].begin(); i_mask!=group_cfg["masks"].end(); i_mask++)
+          group.masks.push_back(boost::regex(i_mask->asCString()));
 
-          _image_groups[*i_gr].formatting_name=group.isMember("formatting_name") ?
-            group["formatting_name"].asCString():"$1";
-            
-          _image_groups[*i_gr].formatting_id=group.isMember("formatting_id") ?
-            group["formatting_id"].asCString():"$1";
-        }
-      } else 
+        group.tag=group_cfg.isMember("masktag") ?
+          json2dcmtag(group_cfg["masktag"]):DcmTagKey(0x0010,0x0010); //PatientName
+        LOG(INFO) << "Adding group " << *i_gr << " with " << group.masks.size() << " masks";
+      } else
         LOG(WARNING) << "Image group \"" << *i_gr << "\" has no mask, and is therefore invalid";
+
+      for(Json::ValueConstIterator i_repl=group_cfg["replace"].begin(); i_repl!=group_cfg["replace"].end(); i_repl++){
+        Json::Value repl_cfg=*i_repl;
+        if(repl_cfg[0].isArray() && repl_cfg[1].isString()){
+          _TagReplacer replacer;
+          replacer.src=json2dcmtag(repl_cfg[0]);
+          replacer.mask=boost::regex(repl_cfg[1].asCString());
+          if(repl_cfg.size()>3){
+            replacer.dst = json2dcmtag(repl_cfg[2]);
+            replacer.formatting = repl_cfg[3].asCString();
+            LOG(INFO) << "Adding replacer " << replacer.src << " \"" << replacer.mask << "\"=>" << replacer.dst << "\"" << replacer.formatting << "\"";
+          } else {
+            replacer.dst = replacer.src;
+            replacer.formatting = (repl_cfg.size() > 2 && repl_cfg[2].isString()) ?
+              repl_cfg[2].asCString():"$1";
+            LOG(INFO) << "Adding inplace-replacer for " << replacer.src << " \"" << replacer.mask << "/" << replacer.formatting << "\"";
+          }
+          group.replacer.push_back(replacer);
+        } else {
+          LOG(ERROR) << "Ignoring invalid replacer in " << *i_gr;
+        }
+      }
+
     }
   }
 
@@ -1077,7 +1114,7 @@ namespace Orthanc
       xfer = EXS_LittleEndianExplicit;
     }
 
-    E_EncodingType encodingType = /*opt_sequenceType*/ EET_ExplicitLength;
+    E_EncodingType encodingType = /*opt_sequenceType*/ EET_UndefinedLength;
 
     // Create the meta-header information
     DcmFileFormat ff(const_cast<DcmDataset*>(&dataSet));
@@ -1612,23 +1649,26 @@ namespace Orthanc
   }
   bool FromDcmtkBridge::FixTags(DcmDataset& dset)
   {
-    OFString patID,studyDate;
-    dset.findAndGetOFString(DcmTagKey(0x0010, 0x0020),patID);
-    dset.findAndGetOFString(DcmTagKey(0x0008, 0x0020),studyDate);
     boost::cmatch what;
     
     for(std::map<std::string,_ImageGroup>::const_iterator i=_image_groups.begin();i!=_image_groups.end();i++){
       const std::string &name=i->first;
       const _ImageGroup &group=i->second;
       for(std::list<boost::regex>::const_iterator r=group.masks.begin();r!=group.masks.end();r++){
-        if(boost::regex_match(patID.begin(),patID.end(), what, *r)){
-          LOG(INFO) << "PatientID " << patID << " matched group " << name;
-          const OFString newID=what.format(group.formatting_id).c_str();
-          const OFString newName=newID+studyDate.substr(2);
-          
-          bool good= (newID==patID) || dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0020),newID).good();
-          good= dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0010),newName).good();
-          return good;
+        OFString key_val;
+        dset.findAndGetOFString(group.tag,key_val);
+        if(boost::regex_match(key_val.begin(),key_val.end(), what, *r)){
+          LOG(INFO) << "Tag " << group.tag << ":" << key_val << " matched group " << name;
+          for(std::list< _TagReplacer >::const_iterator i_repl= group.replacer.begin();i_repl!=group.replacer.end();i_repl++){
+            OFString src;
+            dset.findAndGetOFString(i_repl->src,src);
+            std::string dst(src.c_str());
+            boost::regex_replace(dst, i_repl->mask,i_repl->formatting);
+            if(i_repl->src!=i_repl->dst || strcmp(src.c_str(),dst.c_str())){
+              LOG(INFO) << "(Re)placing " << i_repl->src << ":" << src << " into " << i_repl->dst << " as \"" << dst << "\"";
+              dset.putAndInsertOFStringArray(i_repl->dst,dst.c_str()).good();
+            }
+          }
         }
       }
     }
