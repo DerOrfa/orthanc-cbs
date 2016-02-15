@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -626,8 +627,8 @@ namespace Orthanc
     }
 
 
-    // Authenticate this connection
-    if (that->IsAuthenticationEnabled() && !IsAccessGranted(*that, headers))
+    // Authenticate this connection if its a writing request (anything but GET), or if authentication is enabled anyways
+    if ((strcmp(request->request_method, "GET") || that->IsAuthenticationEnabled()) && !IsAccessGranted(*that, headers))
     {
       output.SendUnauthorized(ORTHANC_REALM);
       return;
@@ -994,23 +995,23 @@ namespace Orthanc
   }
 
 
-	bool MongooseServer::IsValidBasicHttpAuthentication(const std::string& basic) const
-	{
-		std::string result;
-		Toolbox::DecodeBase64(result,basic);
-		const std::size_t token=result.find_first_of(':');
-		if(token!=std::string::npos){
-			const std::string username=result.substr(0,token);
-			PamUser user(username);
-			if(user.auth(result.substr(token+1))){ // user is at least valid
-				if(allowedUsers_.find(username) != allowedUsers_.end()) // and in the list of the valid users
-					return true;
-				else if(user.hasGroup(allowedGroups_)); // in one of the valid groups
-					return true;
-			}
-		} 
-		return false;
-	}
+  bool MongooseServer::IsValidBasicHttpAuthentication(const std::string& basic) const
+  {
+      std::string result;
+      Toolbox::DecodeBase64(result,basic);
+      const std::size_t token=result.find_first_of(':');
+      if(token!=std::string::npos){
+          const std::string username=result.substr(0,token);
+          PamUser user(username);
+          if(user.auth(result.substr(token+1))){ // user is at least valid
+              if(allowedUsers_.find(username) != allowedUsers_.end()) // and in the list of the valid users
+                  return true;
+              else if(user.hasGroup(allowedGroups_)); // in one of the valid groups
+                  return true;
+          }
+      }
+      return false;
+  }
 
 
   void MongooseServer::Register(IHttpHandler& handler)
