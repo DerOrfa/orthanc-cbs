@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -41,6 +42,8 @@
 #include <json/json.h>
 #include <boost/regex.hpp>
 
+struct _TagReplacer;
+
 namespace Orthanc
 {
   class FromDcmtkBridge
@@ -55,6 +58,8 @@ namespace Orthanc
                                       unsigned int maxMultiplicity);
     
     static void RegisterImageGroups(const Json::Value& configuration);
+    static void RegisterReplace(const Json::Value& replace_cfg, std::list< _TagReplacer>& replacer_list, const std::string& location);
+
 
     static Encoding DetectEncoding(const DcmDataset& dataset);
 

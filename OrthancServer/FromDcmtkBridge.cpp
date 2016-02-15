@@ -332,6 +332,11 @@ namespace Orthanc
     {
       return;
     }
+    std::list< _TagReplacer > global_replace;
+    if (configuration.isMember("replace"))
+      RegisterReplace(configuration["replace"],global_replace,"##GLOBAL_REPLACE##");
+
+
     Json::Value::Members groups=configuration["ImageGroups"].getMemberNames();
     for(Json::Value::Members::iterator i_gr=groups.begin();
         i_gr!=groups.end();i_gr++)
@@ -347,29 +352,38 @@ namespace Orthanc
         LOG(INFO) << "Adding group " << *i_gr << " with " << group.masks.size() << " masks";
       } else
         LOG(WARNING) << "Image group \"" << *i_gr << "\" has no mask, and is therefore invalid";
+      group.replacer=global_replace;
+      if (group_cfg.isMember("replace"))
+        RegisterReplace(group_cfg["replace"],group.replacer,*i_gr);
+    }
+  }
 
-      for(Json::ValueConstIterator i_repl=group_cfg["replace"].begin(); i_repl!=group_cfg["replace"].end(); i_repl++){
-        Json::Value repl_cfg=*i_repl;
-        if(repl_cfg[0].isArray() && repl_cfg[1].isString()){
-          _TagReplacer replacer;
-          replacer.src=json2dcmtag(repl_cfg[0]);
-          replacer.mask=boost::regex(repl_cfg[1].asCString());
-          if(repl_cfg.size()>3){
-            replacer.dst = json2dcmtag(repl_cfg[2]);
-            replacer.formatting = repl_cfg[3].asCString();
-            LOG(INFO) << "Adding replacer " << replacer.src << " \"" << replacer.mask << "\"=>" << replacer.dst << "\"" << replacer.formatting << "\"";
-          } else {
-            replacer.dst = replacer.src;
-            replacer.formatting = (repl_cfg.size() > 2 && repl_cfg[2].isString()) ?
-              repl_cfg[2].asCString():"$1";
-            LOG(INFO) << "Adding inplace-replacer for " << replacer.src << " \"" << replacer.mask << "/" << replacer.formatting << "\"";
-          }
-          group.replacer.push_back(replacer);
+  void FromDcmtkBridge::RegisterReplace(const Json::Value& replace_cfg, std::list< _TagReplacer >& replacer_list,const std::string &location)
+  {
+    if(replace_cfg.type() != Json::arrayValue){
+      LOG(ERROR) << "Replace in \"" << location << "\" is not an array";
+      return;
+    }
+    for(Json::ValueConstIterator i_repl=replace_cfg.begin(); i_repl!=replace_cfg.end(); i_repl++){
+      Json::Value repl_cfg=*i_repl;
+      if(repl_cfg[0].isArray() && repl_cfg[1].isString()){
+        _TagReplacer replacer;
+        replacer.src=json2dcmtag(repl_cfg[0]);
+        replacer.mask=boost::regex(repl_cfg[1].asCString());
+        if(repl_cfg.size()>3){
+          replacer.dst = json2dcmtag(repl_cfg[2]);
+          replacer.formatting = repl_cfg[3].asCString();
+          LOG(INFO) << "Adding replacer " << replacer.src << " \"" << replacer.mask << "\"=>" << replacer.dst << "\"" << replacer.formatting << "\"";
         } else {
-          LOG(ERROR) << "Ignoring invalid replacer in " << *i_gr;
+          replacer.dst = replacer.src;
+          replacer.formatting = (repl_cfg.size() > 2 && repl_cfg[2].isString()) ?
+            repl_cfg[2].asCString():"$1";
+          LOG(INFO) << "Adding inplace-replacer for " << replacer.src << " \"" << replacer.mask << "/" << replacer.formatting << "\"";
         }
+        replacer_list.push_back(replacer);
+      } else {
+        LOG(ERROR) << "Ignoring invalid replacer in " << location;
       }
-
     }
   }
 
@@ -1650,28 +1664,36 @@ namespace Orthanc
   bool FromDcmtkBridge::FixTags(DcmDataset& dset)
   {
     boost::cmatch what;
-    
     for(std::map<std::string,_ImageGroup>::const_iterator i=_image_groups.begin();i!=_image_groups.end();i++){
       const std::string &name=i->first;
       const _ImageGroup &group=i->second;
       for(std::list<boost::regex>::const_iterator r=group.masks.begin();r!=group.masks.end();r++){
         OFString key_val;
         dset.findAndGetOFString(group.tag,key_val);
-        if(boost::regex_match(key_val.begin(),key_val.end(), what, *r)){
+        if(boost::regex_match(key_val.begin(),key_val.end(), what, *r)){ // found a group
           LOG(INFO) << "Tag " << group.tag << ":" << key_val << " matched group " << name;
+
+          // do configured replacing
           for(std::list< _TagReplacer >::const_iterator i_repl= group.replacer.begin();i_repl!=group.replacer.end();i_repl++){
             OFString src;
             dset.findAndGetOFString(i_repl->src,src);
-            std::string dst(src.c_str());
-            boost::regex_replace(dst, i_repl->mask,i_repl->formatting);
+            std::string dst=boost::regex_replace(std::string(src.c_str()), i_repl->mask,i_repl->formatting);
             if(i_repl->src!=i_repl->dst || strcmp(src.c_str(),dst.c_str())){
               LOG(INFO) << "(Re)placing " << i_repl->src << ":" << src << " into " << i_repl->dst << " as \"" << dst << "\"";
-              dset.putAndInsertOFStringArray(i_repl->dst,dst.c_str()).good();
+              dset.putAndInsertOFStringArray(i_repl->dst,dst.c_str());
             }
+          }
+
+          // add date to PatientName
+          OFString patientName,studyDate;
+          dset.findAndGetOFString(DcmTagKey(0x0010,0x0010),patientName);
+          dset.findAndGetOFString(DcmTagKey(0x0008,0x0020),studyDate);
+          if(!patientName.empty() && !studyDate.empty()){
+            return dset.putAndInsertOFStringArray(DcmTagKey(0x0010,0x0010),patientName+studyDate.substr(2)).good();
           }
         }
       }
     }
-    return dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0020),OFString("unmatched")).good(); //fallback to "fail-storage"
+    return dset.putAndInsertOFStringArray(DcmTagKey(0x0038, 0x0010),OFString("unmatched")).good(); //fallback to "fail-storage"
   }
 }
