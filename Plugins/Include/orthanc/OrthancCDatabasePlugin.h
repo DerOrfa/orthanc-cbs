@@ -619,6 +619,12 @@ extern "C"
       int64_t id,
       int32_t isProtected);
 
+    OrthancPluginErrorCode  (*setArchived) (
+      /* inputs */
+      void* payload,
+      int64_t id,
+      int32_t isArchived);
+
     OrthancPluginErrorCode  (*startTransaction) (
       /* inputs */
       void* payload);

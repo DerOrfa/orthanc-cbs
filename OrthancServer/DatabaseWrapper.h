@@ -284,15 +284,22 @@ namespace Orthanc
     {
       return base_.IsProtectedPatient(internalId);
     }
+
+    virtual void SetProtectedPatient(int64_t internalId,
+                                     bool isProtected)
+    {
+      base_.SetProtectedPatient(internalId, isProtected);
+    }
+
     virtual bool IsArchived(int64_t internalId)
     {
       return base_.IsArchived(internalId);
     }
 
-    virtual void SetProtectedPatient(int64_t internalId, 
-                                     bool isProtected)
+    virtual void SetArchived(int64_t internalId,
+                             bool isArchived)
     {
-      base_.SetProtectedPatient(internalId, isProtected);
+      base_.SetArchived(internalId, isArchived);
     }
 
     virtual SQLite::ITransaction* StartTransaction()

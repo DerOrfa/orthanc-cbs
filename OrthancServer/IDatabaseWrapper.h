@@ -192,6 +192,9 @@ namespace Orthanc
     virtual void SetProtectedPatient(int64_t internalId, 
                                      bool isProtected) = 0;
 
+    virtual void SetArchived(int64_t internalId,
+                             bool isArchived) = 0;
+
     virtual SQLite::ITransaction* StartTransaction() = 0;
 
     virtual void SetListener(IDatabaseListener& listener) = 0;

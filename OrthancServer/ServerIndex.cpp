@@ -1423,6 +1423,43 @@ namespace Orthanc
     return db_.IsProtectedPatient(id);
   }
      
+  bool ServerIndex::IsArchived(const std::string& publicId)
+  {
+    boost::mutex::scoped_lock lock(mutex_);
+
+    // Lookup for the requested resource
+    int64_t id;
+    ResourceType type;
+    if (!db_.LookupResource(id, type, publicId))
+    {
+      throw OrthancException(ErrorCode_ParameterOutOfRange);
+    }
+
+    return db_.IsArchived(id);
+  }
+
+  void ServerIndex::SetArchived(const std::string& publicId,
+                                        bool IsArchived)
+  {
+    boost::mutex::scoped_lock lock(mutex_);
+    Transaction transaction(*this);
+
+    // Lookup for the requested resource
+    int64_t id;
+    ResourceType type;
+    if (!db_.LookupResource(id, type, publicId))
+    {
+      throw OrthancException(ErrorCode_ParameterOutOfRange);
+    }
+
+    db_.SetArchived(id, IsArchived);
+    transaction.Commit(0);
+
+    if (IsArchived)
+      LOG(INFO) << "Patient " << publicId << " has been marked as archived";
+    else
+      LOG(INFO) << "Patient " << publicId << " has been marked as archived";
+  }
 
   void ServerIndex::SetProtectedPatient(const std::string& publicId,
                                         bool isProtected)

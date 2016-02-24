@@ -761,6 +761,11 @@ namespace Orthanc
   {
     CheckSuccess(backend_.setProtectedPatient(payload_, internalId, isProtected));
   }
+  void OrthancPluginDatabase::SetArchived(int64_t internalId,
+                                          bool isArchived)
+  {
+    CheckSuccess(backend_.setArchived(payload_, internalId, isArchived));
+  }
 
 
   class OrthancPluginDatabase::Transaction : public SQLite::ITransaction

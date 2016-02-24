@@ -431,6 +431,8 @@ namespace Orthanc
         std::string b64 = s.substr(6);
         granted = that.IsValidBasicHttpAuthentication(b64);
       }
+    } else {
+      LOG(WARNING) << "Authorization required, but not in the request";
     }
 
     return granted;
@@ -630,6 +632,7 @@ namespace Orthanc
     // Authenticate this connection if its a writing request (anything but GET), or if authentication is enabled anyways
     if ((strcmp(request->request_method, "GET") || that->IsAuthenticationEnabled()) && !IsAccessGranted(*that, headers))
     {
+      LOG(INFO) << "Rejecting unauthorized \"" << request->request_method << "\"-request";
       output.SendUnauthorized(ORTHANC_REALM);
       return;
     }
