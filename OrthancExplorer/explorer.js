@@ -254,8 +254,9 @@ function FormatStudy(study, link, isReverse)
            ).format
   (study.MainDicomTags.StudyDescription,
    FormatMainDicomTags(study.MainDicomTags, [
-     "StudyDescription", 
-     "StudyTime" 
+     "AccessionNumber",
+     "StudyDescription",
+     "StudyDate"
    ]),
    study.Series.length
   );
@@ -284,9 +285,8 @@ function FormatSeries(series, link, isReverse)
   (series.MainDicomTags.SeriesDescription,
    series.Status,
    FormatMainDicomTags(series.MainDicomTags, [
-     "SeriesDescription", 
-     "SeriesTime", 
-     "Manufacturer",
+	 "SeriesDescription",
+	 "InstitutionName",
      "ImagesInAcquisition",
      "SeriesDate",
      "ImageOrientationPatient"
