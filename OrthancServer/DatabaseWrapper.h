@@ -284,6 +284,10 @@ namespace Orthanc
     {
       return base_.IsProtectedPatient(internalId);
     }
+    virtual bool IsArchived(int64_t internalId)
+    {
+      return base_.IsArchived(internalId);
+    }
 
     virtual void SetProtectedPatient(int64_t internalId, 
                                      bool isProtected)

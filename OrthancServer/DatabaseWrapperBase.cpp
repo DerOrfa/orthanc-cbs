@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -68,7 +69,7 @@ namespace Orthanc
   int64_t DatabaseWrapperBase::CreateResource(const std::string& publicId,
                                               ResourceType type)
   {
-    SQLite::Statement s(db_, SQLITE_FROM_HERE, "INSERT INTO Resources VALUES(NULL, ?, ?, NULL)");
+    SQLite::Statement s(db_, SQLITE_FROM_HERE, "INSERT INTO Resources VALUES(NULL, ?, ?, NULL, 'false')");
     s.BindInt(0, type);
     s.BindString(1, publicId);
     s.Run();
@@ -172,6 +173,20 @@ namespace Orthanc
     s.Run();
   }
 
+  void DatabaseWrapperBase::SetArchived(int64_t resourceId,bool archived)
+  {
+    SQLite::Statement s(db_, SQLITE_FROM_HERE, "UPDATE Resources SET archived = ? WHERE internalId = ?");
+    s.BindBool(0, archived);
+    s.BindInt64(1, resourceId);
+    s.Run();
+  }
+
+  bool DatabaseWrapperBase::IsArchived(int64_t resourceId)
+  {
+    SQLite::Statement s(db_, SQLITE_FROM_HERE, "SELECT archived FROM Resources WHERE internalId=?");
+    s.BindInt64(0, resourceId);
+    return s.Step() && s.ColumnBool(0);
+  }
 
   void DatabaseWrapperBase::SetMetadata(int64_t id,
                                         MetadataType type,

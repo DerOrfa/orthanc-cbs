@@ -479,6 +479,13 @@ extern "C"
       void* payload,
       int64_t id);
 
+    OrthancPluginErrorCode  (*isArchived) (
+      /* outputs */
+      int32_t* isArchived,
+      /* inputs */
+      void* payload,
+      int64_t id);
+
     /* Output: Use OrthancPluginDatabaseAnswerInt32() */
     OrthancPluginErrorCode  (*listAvailableMetadata) (
       /* outputs */

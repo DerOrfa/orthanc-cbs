@@ -931,7 +931,9 @@ namespace Orthanc
         type != expectedType)
     {
       return false;
-    }
+    } else {
+		result["IsArchived"]= db_.IsArchived(id);
+	}
 
     // Find the parent resource (if it exists)
     if (type != ResourceType_Patient)

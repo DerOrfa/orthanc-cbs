@@ -188,6 +188,8 @@ namespace Orthanc
 
     virtual bool IsProtectedPatient(int64_t internalId);
 
+	virtual bool IsArchived(int64_t internalId);
+
     virtual void ListAvailableMetadata(std::list<MetadataType>& target,
                                        int64_t id);
 

@@ -488,6 +488,12 @@ namespace Orthanc
     return (isProtected != 0);
   }
 
+  bool OrthancPluginDatabase::IsArchived(int64_t internalId)
+  {
+    int32_t isArchived;
+    CheckSuccess(backend_.isArchived(&isArchived, payload_, internalId));
+    return (isArchived != 0);
+  }
 
   void OrthancPluginDatabase::ListAvailableMetadata(std::list<MetadataType>& target,
                                                     int64_t id)
