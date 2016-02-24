@@ -345,7 +345,7 @@ namespace Orthanc
       _ImageGroup &group=_image_groups[*i_gr];
       if(group_cfg.isMember("masks")){
         for(Json::ValueConstIterator i_mask=group_cfg["masks"].begin(); i_mask!=group_cfg["masks"].end(); i_mask++)
-          group.masks.push_back(boost::regex(i_mask->asCString()));
+          group.masks.push_back(boost::regex((*i_mask).asCString()));
 
         group.tag=group_cfg.isMember("masktag") ?
           json2dcmtag(group_cfg["masktag"]):DcmTagKey(0x0010,0x0010); //PatientName
