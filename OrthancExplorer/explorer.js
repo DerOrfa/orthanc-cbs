@@ -99,6 +99,14 @@ function ParseDicomDate(s)
   return new Date(y, m, d);
 }
 
+function FormatArchived(text, object)
+{
+  if(object.IsArchived)
+    return text;
+  else
+    return text + " [not archived]";
+}
+
 
 function FormatDicomDate(s)
 {
@@ -228,7 +236,6 @@ function FormatMainDicomTags(tags, tagsToIgnore)
   return s;
 }
 
-
 function FormatPatient(patient, link, isReverse)
 {
   var s = ('<h3>{0}</h3>{1}' + 
@@ -252,7 +259,7 @@ function FormatStudy(study, link, isReverse)
   var s = ('<h3>{0}</h3>{1}' +
            '<span class="ui-li-count">{2}</span>'
            ).format
-  (study.MainDicomTags.StudyDescription,
+  (FormatArchived(study.MainDicomTags.StudyDescription,study),
    FormatMainDicomTags(study.MainDicomTags, [
      "AccessionNumber",
      "StudyDescription",
@@ -282,7 +289,7 @@ function FormatSeries(series, link, isReverse)
   var s = ('<h3>{0}</h3>' +
            '<p><em>Status: <strong>{1}</strong></em></p>{2}' +
            '<span class="ui-li-count">{3}</span>').format
-  (series.MainDicomTags.SeriesDescription,
+  (FormatArchived(series.MainDicomTags.SeriesDescription,series),
    series.Status,
    FormatMainDicomTags(series.MainDicomTags, [
 	 "SeriesDescription",
@@ -301,7 +308,7 @@ function FormatSeries(series, link, isReverse)
 function FormatInstance(instance, link, isReverse)
 {
   var s = ('<h3>Instance {0}</h3>{1}').format
-  (instance.IndexInSeries,
+  (FormatArchived(instance.IndexInSeries,instance),
    FormatMainDicomTags(instance.MainDicomTags, [
      "AcquisitionNumber", 
      "InstanceNumber", 
@@ -386,7 +393,7 @@ function RefreshPatient()
           if (i == 0 || studies[i].MainDicomTags.StudyDate != studies[i - 1].MainDicomTags.StudyDate)
           {
             target.append('<li data-role="list-divider">{0}</li>'.format
-                          (FormatDicomDate(studies[i].MainDicomTags.StudyDate)));
+                          (FormatDicomDate(studies[i].MainDicomTags.StudyDate),studies[i]));
           }
 
           target.append(FormatStudy(studies[i], '#study?uuid=' + studies[i].ID));
