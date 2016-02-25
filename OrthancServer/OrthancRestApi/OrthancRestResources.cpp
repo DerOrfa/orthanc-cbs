@@ -204,18 +204,18 @@ namespace Orthanc
 
     std::string publicId = call.GetUriComponent("id", "");
     
+    Json::Value full;
+    context.ReadJson(full, publicId);
+
     if (simplify)
     {
-      Json::Value full;
-      context.ReadJson(full, publicId);
-
       Json::Value simplified;
       Toolbox::SimplifyTags(simplified, full, DicomToJsonFormat_Human);
       call.GetOutput().AnswerJson(simplified);
     }
     else
     {
-      context.AnswerAttachment(call.GetOutput(), publicId, FileContentType_DicomAsJson);
+      call.GetOutput().AnswerJson(full);
     }
   }
 

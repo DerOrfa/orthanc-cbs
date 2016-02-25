@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -227,12 +228,9 @@ namespace Orthanc
 
       FileInfo dicomInfo = accessor.Write(dicom.GetBufferData(), dicom.GetBufferSize(), 
                                           FileContentType_Dicom, compression, storeMD5_);
-      FileInfo jsonInfo = accessor.Write(dicom.GetJson().toStyledString(), 
-                                         FileContentType_DicomAsJson, compression, storeMD5_);
 
-      ServerIndex::Attachments attachments;
+	  ServerIndex::Attachments attachments;
       attachments.push_back(dicomInfo);
-      attachments.push_back(jsonInfo);
 
       typedef std::map<MetadataType, std::string>  InstanceMetadata;
       InstanceMetadata  instanceMetadata;
@@ -251,7 +249,6 @@ namespace Orthanc
       if (status != StoreStatus_Success)
       {
         accessor.Remove(dicomInfo);
-        accessor.Remove(jsonInfo);
       }
 
       switch (status)
@@ -371,13 +368,14 @@ namespace Orthanc
                                const std::string& instancePublicId)
   {
     std::string s;
-    ReadFile(s, instancePublicId, FileContentType_DicomAsJson);
+    ReadFile(s, instancePublicId, FileContentType_Dicom);
+	ParsedDicomFile dcm(s);
 
-    Json::Reader reader;
-    if (!reader.parse(s, result))
-    {
-      throw OrthancException(ErrorCode_CorruptedFile);
-    }
+	FromDcmtkBridge::ToJson(result,
+                            *dcm.GetDcmtkObject().getDataset(),
+                            DicomToJsonFormat_Full,
+                            DicomToJsonFlags_Default,
+                            ORTHANC_MAXIMUM_TAG_LENGTH);
   }
 
 
