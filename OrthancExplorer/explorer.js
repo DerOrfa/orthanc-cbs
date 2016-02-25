@@ -348,6 +348,22 @@ $('#find-patients').live('pagebeforeshow', function() {
 });
 
 
+$('#find-studies').live('pagebeforeshow', function() {
+  GetResource('/studies?expand', function(studies) {
+      var target = $('#all-studies');
+      $('li', target).remove();
+
+      SortOnDicomTag(studies, 'StudyDescription', false, false);
+
+      for (var i = 0; i < studies.length; i++) {
+        var p = FormatStudy(studies[i], '#study?uuid=' + studies[i].ID);
+        target.append(p);
+      }
+
+      target.listview('refresh');
+  });
+});
+
 
 function SetupAnonymizedOrModifiedFrom(buttonSelector, resource, resourceType, field)
 {
