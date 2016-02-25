@@ -1684,12 +1684,12 @@ namespace Orthanc
             }
           }
 
-          // add date to PatientName
-          OFString patientName,studyDate;
-          dset.findAndGetOFString(DcmTagKey(0x0010,0x0010),patientName);
+          // replace studyDescription
+          OFString patientID,studyDate;
+          dset.findAndGetOFString(DcmTagKey(0x0010,0x0020),patientID);
           dset.findAndGetOFString(DcmTagKey(0x0008,0x0020),studyDate);
-          if(!patientName.empty() && !studyDate.empty()){
-            return dset.putAndInsertOFStringArray(DcmTagKey(0x0010,0x0010),patientName+studyDate.substr(2)).good();
+          if(!patientID.empty() && !studyDate.empty()){
+            return dset.putAndInsertOFStringArray(DcmTagKey(0x0008,0x1030),patientID+"_"+studyDate.substr(2)).good();
           }
         }
       }
