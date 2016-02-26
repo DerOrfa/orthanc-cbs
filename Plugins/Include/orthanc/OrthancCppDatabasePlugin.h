@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -389,6 +390,8 @@ namespace OrthancPlugins
 
     virtual bool IsProtectedPatient(int64_t internalId) = 0;
 
+	virtual bool IsArchived(int64_t internalId) = 0;
+
     virtual void ListAvailableMetadata(std::list<int32_t>& target /*out*/,
                                        int64_t id) = 0;
 
@@ -447,6 +450,9 @@ namespace OrthancPlugins
                              const char* value) = 0;
 
     virtual void SetProtectedPatient(int64_t internalId, 
+                                     bool isProtected) = 0;
+
+    virtual void SetArchived(int64_t internalId,
                                      bool isProtected) = 0;
 
     virtual void StartTransaction() = 0;
@@ -1156,6 +1162,27 @@ namespace OrthancPlugins
       }
     }
 
+    static OrthancPluginErrorCode  IsArchived(int32_t* isArchived,void* payload,int64_t id)
+    {
+      IDatabaseBackend* backend = reinterpret_cast<IDatabaseBackend*>(payload);
+      backend->GetOutput().SetAllowedAnswers(DatabaseBackendOutput::AllowedAnswers_None);
+
+      try
+      {
+        *isArchived = backend->IsArchived(id);
+        return OrthancPluginErrorCode_Success;
+      }
+      catch (std::runtime_error& e)
+      {
+        LogError(backend, e);
+        return OrthancPluginErrorCode_DatabasePlugin;
+      }
+      catch (DatabaseException& e)
+      {
+        return e.GetErrorCode();
+      }
+    }
+
 
     static OrthancPluginErrorCode  ListAvailableMetadata(OrthancPluginDatabaseContext* context,
                                                          void* payload,
@@ -1634,6 +1661,27 @@ namespace OrthancPlugins
       }
     }
 
+    static OrthancPluginErrorCode  SetArchived(void* payload,int64_t id,int32_t isArchived)
+    {
+      IDatabaseBackend* backend = reinterpret_cast<IDatabaseBackend*>(payload);
+      backend->GetOutput().SetAllowedAnswers(DatabaseBackendOutput::AllowedAnswers_None);
+
+      try
+      {
+        backend->SetArchived(id, (isArchived != 0));
+        return OrthancPluginErrorCode_Success;
+      }
+      catch (std::runtime_error& e)
+      {
+        LogError(backend, e);
+        return OrthancPluginErrorCode_DatabasePlugin;
+      }
+      catch (DatabaseException& e)
+      {
+        return e.GetErrorCode();
+      }
+    }
+
 
     static OrthancPluginErrorCode StartTransaction(void* payload)
     {
@@ -1852,6 +1900,7 @@ namespace OrthancPlugins
       params.getTotalUncompressedSize = GetTotalUncompressedSize;
       params.isExistingResource = IsExistingResource;
       params.isProtectedPatient = IsProtectedPatient;
+      params.isArchived = IsArchived;
       params.listAvailableMetadata = ListAvailableMetadata;
       params.listAvailableAttachments = ListAvailableAttachments;
       params.logChange = LogChange;
@@ -1870,6 +1919,7 @@ namespace OrthancPlugins
       params.setIdentifierTag = SetIdentifierTag;
       params.setMetadata = SetMetadata;
       params.setProtectedPatient = SetProtectedPatient;
+	  params.setArchived = SetArchived;
       params.startTransaction = StartTransaction;
       params.rollbackTransaction = RollbackTransaction;
       params.commitTransaction = CommitTransaction;

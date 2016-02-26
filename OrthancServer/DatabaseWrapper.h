@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
