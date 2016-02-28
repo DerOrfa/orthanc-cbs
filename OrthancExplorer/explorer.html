@@ -34,20 +34,6 @@
     <script src="../plugins/explorer.js"></script>
   </head>
   <body>
-    <div data-role="page" id="find-patients" >
-      <div data-role="header" >
-	<h1><span class="orthanc-name"></span>Find a patient</h1>
-        <a href="#plugins" data-icon="grid" class="ui-btn-left" data-direction="reverse">Plugins</a>
-        <div data-type="horizontal" data-role="controlgroup" class="ui-btn-right"> 
-          <a href="#find-studies" data-icon="search" data-role="button">Studies</a>
-          <a href="#query-retrieve" data-icon="search" data-role="button">Query/Retrieve</a>
-        </div>
-      </div>
-      <div data-role="content">
-        <ul id="all-patients" data-role="listview" data-inset="true" data-filter="true">
-        </ul>
-      </div>
-    </div>
     <div data-role="page" id="find-studies" >
       <div data-role="header" >
 	<h1><span class="orthanc-name"></span>Find a study</h1>
@@ -58,6 +44,20 @@
       </div>
       <div data-role="content">
         <ul id="all-studies" data-role="listview" data-inset="true" data-filter="true">
+        </ul>
+      </div>
+    </div>
+    <div data-role="page" id="find-patients" >
+      <div data-role="header" >
+	<h1><span class="orthanc-name"></span>Find a patient</h1>
+        <a href="#plugins" data-icon="grid" class="ui-btn-left" data-direction="reverse">Plugins</a>
+        <div data-type="horizontal" data-role="controlgroup" class="ui-btn-right">
+          <a href="#find-studies" data-icon="search" data-role="button">Studies</a>
+          <a href="#query-retrieve" data-icon="search" data-role="button">Query/Retrieve</a>
+        </div>
+      </div>
+      <div data-role="content">
+        <ul id="all-patients" data-role="listview" data-inset="true" data-filter="true">
         </ul>
       </div>
     </div>
