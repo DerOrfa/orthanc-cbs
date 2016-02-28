@@ -35,8 +35,6 @@ public:
   void CloseDirectory();
   void OpenDirectory(const std::string &name);
   void AddFile(const std::string &filename,const std::string &content);
-  void Finish();
-  
 };
 
 #endif // TARSTREAMWRITER_H

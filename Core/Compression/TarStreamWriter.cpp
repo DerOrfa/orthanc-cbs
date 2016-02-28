@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /*
  * <one line to give the program's name and a brief idea of what it does.>
  * Copyright (C) 2016  Enrico Reimer <reimer@cbs.mpg.de>
@@ -36,11 +37,7 @@ TarStreamWriter::TarStreamWriter(std::string cmd):root("/tmp")
 }
 TarStreamWriter::~TarStreamWriter()
 {
-  Finish();
-}
-void TarStreamWriter::Finish()
-{
-  pclose(f);
+  pclose(f);//we cannot handle errors, because other waitpids will screw ours up
   for(std::set<boost::filesystem::path>::iterator i=files.begin();i!=files.end();i++){
     boost::system::error_code ec;
     fs::remove(*i,ec);
