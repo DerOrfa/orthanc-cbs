@@ -282,7 +282,7 @@ function FormatSeries(series, link, isReverse)
   var s = ('<h3>{0}</h3>' +
            '<p><em>Status: <strong>{1}</strong></em></p>{2}' +
            '<span class="ui-li-count">{3}</span>').format
-  (series.MainDicomTags.SeriesDescription,
+  ('S'+series.MainDicomTags.SeriesNumber+'_'+series.MainDicomTags.SeriesDescription,
    series.Status,
    FormatMainDicomTags(series.MainDicomTags, [
 	 "SeriesDescription",
@@ -353,10 +353,16 @@ $('#find-studies').live('pagebeforeshow', function() {
       var target = $('#all-studies');
       $('li', target).remove();
 
-      SortOnDicomTag(studies, 'StudyDescription', false, false);
+      SortOnDicomTag(studies, 'StudyDate', false, true);
 
       for (var i = 0; i < studies.length; i++) {
         var p = FormatStudy(studies[i], '#study?uuid=' + studies[i].ID);
+
+        if (i == 0 || studies[i].MainDicomTags.StudyDate != studies[i - 1].MainDicomTags.StudyDate)
+        {
+            target.append('<li data-role="list-divider">{0}</li>'.format
+                          (FormatDicomDate(studies[i].MainDicomTags.StudyDate)));
+        }
         target.append(p);
       }
 
@@ -440,7 +446,7 @@ function RefreshStudy()
     GetResource('/studies/' + $.mobile.pageData.uuid, function(study) {
       GetResource('/patients/' + study.ParentPatient, function(patient) {
         GetResource('/studies/' + $.mobile.pageData.uuid + '/series', function(series) {
-          SortOnDicomTag(series, 'SeriesDate', false, true);
+          SortOnDicomTag(series, 'SeriesNumber', false, true);
 
           $('#study .patient-link').attr('href', '#patient?uuid=' + patient.ID);
           $('#study-info li').remove();
