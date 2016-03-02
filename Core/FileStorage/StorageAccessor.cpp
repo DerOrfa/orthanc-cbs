@@ -154,10 +154,6 @@ namespace Orthanc
         extension = ".dcm";
         break;
 
-      case FileContentType_DicomAsJson:
-        extension = ".json";
-        break;
-
       default:
         // Non-standard content type
         extension = "";

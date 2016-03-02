@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -96,6 +97,11 @@ namespace Orthanc
 
     void AttachChild(int64_t parent,
                      int64_t child);
+
+    void SetArchived(int64_t res,
+                      bool archived=true);
+
+    bool IsArchived(int64_t resourceId);
 
     void SetMetadata(int64_t id,
                      MetadataType type,

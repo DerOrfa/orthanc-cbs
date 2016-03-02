@@ -188,6 +188,8 @@ namespace Orthanc
 
     virtual bool IsProtectedPatient(int64_t internalId);
 
+	virtual bool IsArchived(int64_t internalId);
+
     virtual void ListAvailableMetadata(std::list<MetadataType>& target,
                                        int64_t id);
 
@@ -248,7 +250,10 @@ namespace Orthanc
     virtual void SetProtectedPatient(int64_t internalId, 
                                      bool isProtected);
 
-    virtual SQLite::ITransaction* StartTransaction();
+    virtual void SetArchived(int64_t internalId,
+                             bool isArchived);
+
+	virtual SQLite::ITransaction* StartTransaction();
 
     virtual void SetListener(IDatabaseListener& listener)
     {

@@ -1,3 +1,5 @@
+﻿// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
+
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -28,8 +30,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  **/
-
-
 
 #include "PrecompiledHeadersServer.h"
 
@@ -95,7 +95,24 @@
 #include <boost/math/special_functions/round.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <dcmtk/dcmdata/dcostrmb.h>
+#include <dcmtk/dcmdata/dcostrmf.h>
 
+struct _TagReplacer{
+  boost::regex mask;
+  std::string formatting;
+  DcmTagKey src,dst;
+};
+struct _ImageGroup{
+  std::list<boost::regex> masks;
+  std::list<_TagReplacer> replacer;
+  DcmTagKey tag;
+
+};
+DcmTagKey json2dcmtag(const Json::Value &val){
+  return DcmTagKey(val[0].asUInt(),val[1].asUInt());
+}
+
+static std::map<std::string,_ImageGroup> _image_groups;
 
 namespace Orthanc
 {
@@ -288,15 +305,98 @@ namespace Orthanc
     }
   }
 
+  /**
+   * Registers image groups based on the configuration.
+   * This expects an JsonObject of the following format in the configuration
+   * \code
+   * "ImageGroups":{
+   *    "Probands":{
+   *        "masktag" : [16, 16],
+   *        "masks":["[A-Z]{2}[A-Z0-9][TX](?:[0-9]{6})?"],
+   *        "replace" : [
+   *            [[16, 16],"([A-Z]{2}[A-Z0-9][TX])(?:[0-9]{6})?","$1_"],
+   *            [[16,16384],".*",[56,16],"$&"]
+   *        ]
+   *    }
+   * }
+   * \endcode
+   * "formatting_name" and "formatting_id" will replace the PatientName and PatientID in the dicom.
+   * They will default to "$1" if ommited
+   */  
+  void FromDcmtkBridge::RegisterImageGroups(const Json::Value& configuration)
+  {
+    _image_groups.clear();
+    if (configuration.type() != Json::objectValue ||
+      !configuration.isMember("ImageGroups") ||
+      configuration["ImageGroups"].type() != Json::objectValue)
+    {
+      return;
+    }
+    std::list< _TagReplacer > global_replace;
+    if (configuration.isMember("replace"))
+      RegisterReplace(configuration["replace"],global_replace,"##GLOBAL_REPLACE##");
 
-  Encoding FromDcmtkBridge::DetectEncoding(DcmDataset& dataset)
+
+    Json::Value::Members groups=configuration["ImageGroups"].getMemberNames();
+    for(Json::Value::Members::iterator i_gr=groups.begin();
+        i_gr!=groups.end();i_gr++)
+    {
+      const Json::Value &group_cfg= configuration["ImageGroups"][*i_gr];
+      _ImageGroup &group=_image_groups[*i_gr];
+      if(group_cfg.isMember("masks")){
+        for(Json::ValueConstIterator i_mask=group_cfg["masks"].begin(); i_mask!=group_cfg["masks"].end(); i_mask++)
+          group.masks.push_back(boost::regex((*i_mask).asCString()));
+
+        group.tag=group_cfg.isMember("masktag") ?
+          json2dcmtag(group_cfg["masktag"]):DcmTagKey(0x0010,0x0010); //PatientName
+        LOG(INFO) << "Adding group " << *i_gr << " with " << group.masks.size() << " masks";
+      } else
+        LOG(WARNING) << "Image group \"" << *i_gr << "\" has no mask, and is therefore invalid";
+      group.replacer=global_replace;
+      if (group_cfg.isMember("replace"))
+        RegisterReplace(group_cfg["replace"],group.replacer,*i_gr);
+    }
+  }
+
+  void FromDcmtkBridge::RegisterReplace(const Json::Value& replace_cfg, std::list< _TagReplacer >& replacer_list,const std::string &location)
+  {
+    if(replace_cfg.type() != Json::arrayValue){
+      LOG(ERROR) << "Replace in \"" << location << "\" is not an array";
+      return;
+    }
+    for(Json::ValueConstIterator i_repl=replace_cfg.begin(); i_repl!=replace_cfg.end(); i_repl++){
+      Json::Value repl_cfg=*i_repl;
+      if(repl_cfg[0].isArray() && repl_cfg[1].isString()){
+        _TagReplacer replacer;
+        replacer.src=json2dcmtag(repl_cfg[0]);
+        replacer.mask=boost::regex(repl_cfg[1].asCString());
+        if(repl_cfg.size()>3){
+          replacer.dst = json2dcmtag(repl_cfg[2]);
+          replacer.formatting = repl_cfg[3].asCString();
+          LOG(INFO) << "Adding replacer " << replacer.src << " \"" << replacer.mask << "\"=>" << replacer.dst << "\"" << replacer.formatting << "\"";
+        } else {
+          replacer.dst = replacer.src;
+          replacer.formatting = (repl_cfg.size() > 2 && repl_cfg[2].isString()) ?
+            repl_cfg[2].asCString():"$1";
+          LOG(INFO) << "Adding inplace-replacer for " << replacer.src << " \"" << replacer.mask << "/" << replacer.formatting << "\"";
+        }
+        replacer_list.push_back(replacer);
+      } else {
+        LOG(ERROR) << "Ignoring invalid replacer in " << location;
+      }
+    }
+  }
+
+
+
+  Encoding FromDcmtkBridge::DetectEncoding(const DcmDataset& dataset)
   {
     // By default, Latin1 encoding is assumed
     std::string s = Configuration::GetGlobalStringParameter("DefaultEncoding", "Latin1");
     Encoding encoding = s.empty() ? Encoding_Latin1 : StringToEncoding(s.c_str());
 
-    OFString tmp;
-    if (dataset.findAndGetOFString(DCM_SpecificCharacterSet, tmp).good())
+    OFString tmp; //findAndGetOFString is not const - no idea why
+    if (const_cast<DcmDataset&>(dataset).findAndGetOFString(DCM_SpecificCharacterSet, tmp).good())
     {
       std::string characterSet = Toolbox::StripSpaces(std::string(tmp.c_str()));
 
@@ -324,14 +424,14 @@ namespace Orthanc
   }
 
 
-  void FromDcmtkBridge::Convert(DicomMap& target, DcmDataset& dataset)
+  void FromDcmtkBridge::Convert(Orthanc::DicomMap& target, const DcmDataset& dataset)
   {
     Encoding encoding = DetectEncoding(dataset);
 
     target.Clear();
     for (unsigned long i = 0; i < dataset.card(); i++)
     {
-      DcmElement* element = dataset.getElement(i);
+      const DcmElement* element = const_cast<DcmDataset&>(dataset).getElement(i);
       if (element && element->isLeaf())
       {
         target.SetValue(element->getTag().getGTag(),
@@ -354,7 +454,7 @@ namespace Orthanc
   }
 
 
-  DicomValue* FromDcmtkBridge::ConvertLeafElement(DcmElement& element,
+  DicomValue* FromDcmtkBridge::ConvertLeafElement(const DcmElement& element,
                                                   DicomToJsonFlags flags,
                                                   Encoding encoding)
   {
@@ -366,7 +466,7 @@ namespace Orthanc
 
     char *c = NULL;
     if (element.isaString() &&
-        element.getString(c).good())
+        const_cast<DcmElement&>(element).getString(c).good())
     {
       if (c == NULL)  // This case corresponds to the empty string
       {
@@ -424,9 +524,9 @@ namespace Orthanc
           if (!(flags & DicomToJsonFlags_ConvertBinaryToNull))
           {
             Uint8* data = NULL;
-            if (element.getUint8Array(data) == EC_Normal)
+            if (const_cast<DcmElement&>(element).getUint8Array(data) == EC_Normal)
             {
-              return new DicomValue(reinterpret_cast<const char*>(data), element.getLength(), true);
+              return new DicomValue(reinterpret_cast<const char*>(data), const_cast<DcmElement&>(element).getLength(), true);
             }
           }
 
@@ -440,7 +540,7 @@ namespace Orthanc
         case EVR_SL:  // signed long
         {
           Sint32 f;
-          if (dynamic_cast<DcmSignedLong&>(element).getSint32(f).good())
+          if (dynamic_cast<DcmSignedLong&>(const_cast<DcmElement&>(element)).getSint32(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -449,7 +549,7 @@ namespace Orthanc
         case EVR_SS:  // signed short
         {
           Sint16 f;
-          if (dynamic_cast<DcmSignedShort&>(element).getSint16(f).good())
+          if (dynamic_cast<DcmSignedShort&>(const_cast<DcmElement&>(element)).getSint16(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -458,7 +558,7 @@ namespace Orthanc
         case EVR_UL:  // unsigned long
         {
           Uint32 f;
-          if (dynamic_cast<DcmUnsignedLong&>(element).getUint32(f).good())
+          if (dynamic_cast<DcmUnsignedLong&>(const_cast<DcmElement&>(element)).getUint32(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -467,7 +567,7 @@ namespace Orthanc
         case EVR_US:  // unsigned short
         {
           Uint16 f;
-          if (dynamic_cast<DcmUnsignedShort&>(element).getUint16(f).good())
+          if (dynamic_cast<DcmUnsignedShort&>(const_cast<DcmElement&>(element)).getUint16(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -476,7 +576,7 @@ namespace Orthanc
         case EVR_FL:  // float single-precision
         {
           Float32 f;
-          if (dynamic_cast<DcmFloatingPointSingle&>(element).getFloat32(f).good())
+          if (dynamic_cast<DcmFloatingPointSingle&>(const_cast<DcmElement&>(element)).getFloat32(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -485,7 +585,7 @@ namespace Orthanc
         case EVR_FD:  // float double-precision
         {
           Float64 f;
-          if (dynamic_cast<DcmFloatingPointDouble&>(element).getFloat64(f).good())
+          if (dynamic_cast<DcmFloatingPointDouble&>(const_cast<DcmElement&>(element)).getFloat64(f).good())
             return new DicomValue(boost::lexical_cast<std::string>(f), false);
           else
             return new DicomValue;
@@ -499,7 +599,7 @@ namespace Orthanc
         case EVR_AT:
         {
           DcmTagKey tag;
-          if (dynamic_cast<DcmAttributeTag&>(element).getTagVal(tag, 0).good())
+          if (dynamic_cast<DcmAttributeTag&>(const_cast<DcmElement&>(element)).getTagVal(tag, 0).good())
           {
             DicomTag t(tag.getGroup(), tag.getElement());
             return new DicomValue(t.Format(), false);
@@ -561,7 +661,7 @@ namespace Orthanc
 
 
   static Json::Value& PrepareNode(Json::Value& parent,
-                                  DcmElement& element,
+                                  const DcmElement& element,
                                   DicomToJsonFormat format)
   {
     assert(parent.type() == Json::objectValue);
@@ -699,7 +799,7 @@ namespace Orthanc
 
 
   static void DatasetToJson(Json::Value& parent,
-                            DcmItem& item,
+                            const DcmItem& item,
                             DicomToJsonFormat format,
                             DicomToJsonFlags flags,
                             unsigned int maxStringLength,
@@ -707,7 +807,7 @@ namespace Orthanc
 
 
   void FromDcmtkBridge::ToJson(Json::Value& parent,
-                               DcmElement& element,
+                               const DcmElement& element,
                                DicomToJsonFormat format,
                                DicomToJsonFlags flags,
                                unsigned int maxStringLength,
@@ -734,7 +834,7 @@ namespace Orthanc
       // "All subclasses of DcmElement except for DcmSequenceOfItems
       // are leaf nodes, while DcmSequenceOfItems, DcmItem, DcmDataset
       // etc. are not." The following dynamic_cast is thus OK.
-      DcmSequenceOfItems& sequence = dynamic_cast<DcmSequenceOfItems&>(element);
+      DcmSequenceOfItems& sequence = dynamic_cast<DcmSequenceOfItems&>(const_cast<DcmElement&>(element));
 
       for (unsigned long i = 0; i < sequence.card(); i++)
       {
@@ -747,7 +847,7 @@ namespace Orthanc
 
 
   static void DatasetToJson(Json::Value& parent,
-                            DcmItem& item,
+                            const DcmItem& item,
                             DicomToJsonFormat format,
                             DicomToJsonFlags flags,
                             unsigned int maxStringLength,
@@ -757,7 +857,7 @@ namespace Orthanc
 
     for (unsigned long i = 0; i < item.card(); i++)
     {
-      DcmElement* element = item.getElement(i);
+      const DcmElement* element = const_cast<DcmItem&>(item).getElement(i);
       if (element == NULL)
       {
         throw OrthancException(ErrorCode_InternalError);
@@ -801,11 +901,7 @@ namespace Orthanc
   }
 
 
-  void FromDcmtkBridge::ToJson(Json::Value& target, 
-                               DcmDataset& dataset,
-                               DicomToJsonFormat format,
-                               DicomToJsonFlags flags,
-                               unsigned int maxStringLength)
+  void FromDcmtkBridge::ToJson(Json::Value& target, const DcmDataset& dataset, Orthanc::DicomToJsonFormat format, Orthanc::DicomToJsonFlags flags, unsigned int maxStringLength)
   {
     target = Json::objectValue;
     DatasetToJson(target, dataset, format, flags, maxStringLength, DetectEncoding(dataset));
@@ -1009,7 +1105,7 @@ namespace Orthanc
   }
 
   bool FromDcmtkBridge::SaveToMemoryBuffer(std::string& buffer,
-                                           DcmDataset& dataSet)
+                                           const DcmDataset& dataSet)
   {
     // Determine the transfer syntax which shall be used to write the
     // information to the file. We always switch to the Little Endian
@@ -1032,26 +1128,24 @@ namespace Orthanc
       xfer = EXS_LittleEndianExplicit;
     }
 
-    E_EncodingType encodingType = /*opt_sequenceType*/ EET_ExplicitLength;
+    E_EncodingType encodingType = /*opt_sequenceType*/ EET_UndefinedLength;
 
     // Create the meta-header information
-    DcmFileFormat ff(&dataSet);
-    ff.validateMetaInfo(xfer);
-    ff.removeInvalidGroups();
+    DcmFileFormat ff(const_cast<DcmDataset*>(&dataSet));
 
     // Create a memory buffer with the proper size
     {
-      const uint32_t estimatedSize = ff.calcElementLength(xfer, encodingType);  // (*)
+      // unknown tags cannot be estimated @Todo get a better estimation
+      const uint32_t estimatedSize = ff.calcElementLength(xfer, encodingType)*1.3;  // (*)
       buffer.resize(estimatedSize);
     }
 
     DcmOutputBufferStream ob(&buffer[0], buffer.size());
+//     DcmOutputFileStream ob("/tmp/delme.ima");
 
     // Fill the memory buffer with the meta-header and the dataset
     ff.transferInit();
-    OFCondition c = ff.write(ob, xfer, encodingType, NULL,
-                             /*opt_groupLength*/ EGL_recalcGL,
-                             /*opt_paddingType*/ EPD_withoutPadding);
+    OFCondition c = ff.write(ob, xfer, encodingType, NULL);
     ff.transferEnd();
 
     if (c.good())
@@ -1071,6 +1165,7 @@ namespace Orthanc
     else
     {
       // Error
+      LOG(ERROR) << "Failed to save dicom to buffer:" << c.text();
       buffer.clear();
       return false;
     }
@@ -1566,16 +1661,41 @@ namespace Orthanc
 
     throw OrthancException(ErrorCode_ParameterOutOfRange);
   }
-	bool FromDcmtkBridge::FixTags(DcmDataset& dset)
-	{
-		OFString patID,patName;
-		bool ret=true;
-		dset.findAndGetOFString(DcmTagKey(0x0010, 0x0020),patID);
-		dset.findAndGetOFString(DcmTagKey(0x0010, 0x0010),patName);
-		if(patID=="xxxx"){
-			ret&= dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0020),patName.substr(0,4)).good();
-		}
-		ret&=dset.putAndInsertOFStringArray(DcmTagKey(0x0010, 0x0010),patName.substr(0,4)).good();
-		return ret;
-	}
+  bool FromDcmtkBridge::FixTags(DcmDataset& dset)
+  {
+    boost::cmatch what;
+    for(std::map<std::string,_ImageGroup>::const_iterator i=_image_groups.begin();i!=_image_groups.end();i++){
+      const std::string &name=i->first;
+      const _ImageGroup &group=i->second;
+      for(std::list<boost::regex>::const_iterator r=group.masks.begin();r!=group.masks.end();r++){
+        OFString key_val;
+        dset.findAndGetOFString(group.tag,key_val);
+        if(boost::regex_match(key_val.begin(),key_val.end(), what, *r)){ // found a group
+          LOG(INFO) << "Tag " << group.tag << ":" << key_val << " matched group " << name;
+
+          // do configured replacing
+          for(std::list< _TagReplacer >::const_iterator i_repl= group.replacer.begin();i_repl!=group.replacer.end();i_repl++){
+            OFString src;
+            dset.findAndGetOFString(i_repl->src,src);
+            std::string dst=boost::regex_replace(std::string(src.c_str()), i_repl->mask,i_repl->formatting);
+            if(i_repl->src!=i_repl->dst || strcmp(src.c_str(),dst.c_str())){
+              LOG(INFO) << "(Re)placing " << i_repl->src << ":" << src << " into " << i_repl->dst << " as \"" << dst << "\"";
+              dset.putAndInsertOFStringArray(i_repl->dst,dst.c_str());
+            }
+          }
+
+          // replace studyDescription
+          OFString patientID,studyDate,studyTime;
+          dset.findAndGetOFString(DcmTagKey(0x0010,0x0020),patientID);
+          dset.findAndGetOFString(DcmTagKey(0x0008,0x0020),studyDate);
+          dset.findAndGetOFString(DcmTagKey(0x0008,0x0030),studyTime);
+
+          if(!patientID.empty() && !studyDate.empty()){
+            return dset.putAndInsertOFStringArray(DcmTagKey(0x0008,0x1030),patientID+"_"+studyDate.substr(2)+"_"+studyTime.substr(0,6)).good();
+          }
+        }
+      }
+    }
+    return dset.putAndInsertOFStringArray(DcmTagKey(0x0038, 0x0010),OFString("unmatched")).good(); //fallback to "fail-storage"
+  }
 }

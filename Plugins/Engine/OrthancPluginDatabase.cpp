@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -488,6 +489,12 @@ namespace Orthanc
     return (isProtected != 0);
   }
 
+  bool OrthancPluginDatabase::IsArchived(int64_t internalId)
+  {
+    int32_t isArchived;
+    CheckSuccess(backend_.isArchived(&isArchived, payload_, internalId));
+    return (isArchived != 0);
+  }
 
   void OrthancPluginDatabase::ListAvailableMetadata(std::list<MetadataType>& target,
                                                     int64_t id)
@@ -754,6 +761,11 @@ namespace Orthanc
                                                   bool isProtected)
   {
     CheckSuccess(backend_.setProtectedPatient(payload_, internalId, isProtected));
+  }
+  void OrthancPluginDatabase::SetArchived(int64_t internalId,
+                                          bool isArchived)
+  {
+    CheckSuccess(backend_.setArchived(payload_, internalId, isArchived));
   }
 
 

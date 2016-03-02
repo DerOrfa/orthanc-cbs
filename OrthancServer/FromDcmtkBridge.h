@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -39,6 +40,9 @@
 #include <dcmtk/dcmdata/dcdatset.h>
 #include <dcmtk/dcmdata/dcmetinf.h>
 #include <json/json.h>
+#include <boost/regex.hpp>
+
+struct _TagReplacer;
 
 namespace Orthanc
 {
@@ -52,10 +56,14 @@ namespace Orthanc
                                       const std::string& name,
                                       unsigned int minMultiplicity,
                                       unsigned int maxMultiplicity);
+    
+    static void RegisterImageGroups(const Json::Value& configuration);
+    static void RegisterReplace(const Json::Value& replace_cfg, std::list< _TagReplacer>& replacer_list, const std::string& location);
 
-    static Encoding DetectEncoding(DcmDataset& dataset);
 
-    static void Convert(DicomMap& target, DcmDataset& dataset);
+    static Encoding DetectEncoding(const DcmDataset& dataset);
+
+    static void Convert(DicomMap& target, const DcmDataset& dataset);
 
     static DicomTag Convert(const DcmTag& tag);
 
@@ -63,19 +71,17 @@ namespace Orthanc
 
     static bool IsUnknownTag(const DicomTag& tag);
 
-    static DicomValue* ConvertLeafElement(DcmElement& element,
-                                          DicomToJsonFlags flags,
-                                          Encoding encoding);
+    static DicomValue* ConvertLeafElement(const DcmElement& element, DicomToJsonFlags flags, Encoding encoding);
 
     static void ToJson(Json::Value& parent,
-                       DcmElement& element,
+                       const DcmElement& element,
                        DicomToJsonFormat format,
                        DicomToJsonFlags flags,
                        unsigned int maxStringLength,
                        Encoding dicomEncoding);
 
     static void ToJson(Json::Value& target, 
-                       DcmDataset& dataset,
+                       const DcmDataset& dataset,
                        DicomToJsonFormat format,
                        DicomToJsonFlags flags,
                        unsigned int maxStringLength);
@@ -121,7 +127,7 @@ namespace Orthanc
     static std::string GenerateUniqueIdentifier(ResourceType level);
 
     static bool SaveToMemoryBuffer(std::string& buffer,
-                                   DcmDataset& dataSet);
+                                   const DcmDataset& dataSet);
 
     static ValueRepresentation GetValueRepresentation(const DicomTag& tag);
 

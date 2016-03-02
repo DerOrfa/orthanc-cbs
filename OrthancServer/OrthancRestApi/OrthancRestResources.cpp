@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -192,7 +193,7 @@ namespace Orthanc
     call.BodyToString(target);
     Toolbox::WriteFile(dicom, target);
 
-    call.GetOutput().AnswerBuffer("{}", "application/json");
+    call.GetOutput().AnswerBuffer(std::string("{written : \"")+target+"\"}", "application/json");
   }
 
 
@@ -203,18 +204,18 @@ namespace Orthanc
 
     std::string publicId = call.GetUriComponent("id", "");
     
+    Json::Value full;
+    context.ReadJson(full, publicId);
+
     if (simplify)
     {
-      Json::Value full;
-      context.ReadJson(full, publicId);
-
       Json::Value simplified;
       Toolbox::SimplifyTags(simplified, full, DicomToJsonFormat_Human);
       call.GetOutput().AnswerJson(simplified);
     }
     else
     {
-      context.AnswerAttachment(call.GetOutput(), publicId, FileContentType_DicomAsJson);
+      call.GetOutput().AnswerJson(full);
     }
   }
 
@@ -493,7 +494,40 @@ namespace Orthanc
     call.GetOutput().AnswerJson(result);
   }
 
+  // check if resource was archived
 
+  static void IsArchived(RestApiGetCall& call)
+  {
+    std::string publicId = call.GetUriComponent("id", "");
+    bool IsArchived = OrthancRestApi::GetIndex(call).IsArchived(publicId);
+    call.GetOutput().AnswerBuffer(IsArchived ? "1" : "0", "text/plain");
+  }
+
+  static void SetArchived(RestApiPutCall& call)
+  {
+    ServerContext& context = OrthancRestApi::GetContext(call);
+
+    std::string publicId = call.GetUriComponent("id", "");
+
+    std::string body;
+    call.BodyToString(body);
+    body = Toolbox::StripSpaces(body);
+
+    if (body == "0")
+    {
+      context.GetIndex().SetArchived(publicId, false);
+      call.GetOutput().AnswerBuffer("", "text/plain");
+    }
+    else if (body == "1")
+    {
+      context.GetIndex().SetArchived(publicId, true);
+      call.GetOutput().AnswerBuffer("", "text/plain");
+    }
+    else
+    {
+      // Bad request
+    }
+  }
 
   // Handling of metadata -----------------------------------------------------
 
@@ -1357,6 +1391,9 @@ namespace Orthanc
 
     Register("/patients/{id}/protected", IsProtectedPatient);
     Register("/patients/{id}/protected", SetPatientProtection);
+
+    Register("/{resourceType}/{id}/archived", IsArchived);
+    Register("/{resourceType}/{id}/archived", SetArchived);
 
     Register("/{resourceType}/{id}/metadata", ListMetadata);
     Register("/{resourceType}/{id}/metadata/{name}", DeleteMetadata);

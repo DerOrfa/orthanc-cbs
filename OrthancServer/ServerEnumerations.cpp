@@ -66,7 +66,6 @@ namespace Orthanc
     dictMetadataType_.Add(MetadataType_Instance_Origin, "Origin");
 
     dictContentType_.Add(FileContentType_Dicom, "dicom");
-    dictContentType_.Add(FileContentType_DicomAsJson, "dicom-as-json");
   }
 
   void RegisterUserMetadata(int metadata,

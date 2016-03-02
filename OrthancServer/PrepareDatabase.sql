@@ -7,7 +7,8 @@ CREATE TABLE Resources(
        internalId INTEGER PRIMARY KEY AUTOINCREMENT,
        resourceType INTEGER,
        publicId TEXT,
-       parentId INTEGER REFERENCES Resources(internalId) ON DELETE CASCADE
+       parentId INTEGER REFERENCES Resources(internalId) ON DELETE CASCADE,
+       archived boolean
        );
 
 CREATE TABLE MainDicomTags(
@@ -63,7 +64,8 @@ CREATE TABLE ExportedResources(
        studyInstanceUid TEXT,
        seriesInstanceUid TEXT,
        sopInstanceUid TEXT,
-       date TEXT
+       date TEXT,
+       archived boolean
        ); 
 
 CREATE TABLE PatientRecyclingOrder(
