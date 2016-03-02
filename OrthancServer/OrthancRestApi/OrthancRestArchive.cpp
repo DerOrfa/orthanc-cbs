@@ -574,13 +574,11 @@ namespace Orthanc
     };
 
     
-    class SftpArchiveWriterVisitor : public IArchiveVisitor
+    class TarStreamWriterVisitor : public IArchiveVisitor
     {
     private:
       TarStreamWriter&  writer_;
       ServerContext&            context_;
-      char                    instanceFormat_[24];
-      unsigned int            countInstances_;
 
       static std::string GetTag(const DicomMap& tags,
                                 const DicomTag& tag)
@@ -599,13 +597,10 @@ namespace Orthanc
       }
 
     public:
-      SftpArchiveWriterVisitor(TarStreamWriter& writer, ServerContext& context) :
+      TarStreamWriterVisitor(TarStreamWriter& writer, ServerContext& context) :
         writer_(writer),
-        context_(context),
-        countInstances_(0)
-      {
-        snprintf(instanceFormat_, sizeof(instanceFormat_) - 1, "%%08d.dcm");
-      }
+        context_(context)
+      {}
 
       virtual void Open(ResourceType level, const std::string& publicId)
       {
@@ -661,12 +656,7 @@ namespace Orthanc
       {
         std::string content;
         context_.ReadFile(content, dicom);
-
-        char filename[24];
-        snprintf(filename, sizeof(filename) - 1, instanceFormat_, countInstances_);
-        countInstances_ ++;
-
-        writer_.AddFile(filename,content);
+        writer_.AddFile(dicom.GetUuid()+".ima",content);
       }
 
       static void Apply(RestApiOutput& output, ServerContext& context,
@@ -677,7 +667,7 @@ namespace Orthanc
         Configuration::GetConfiguration(configuration);
         
         const std::string placeholder="{}";
-        std::string cmd=configuration["sftp-command"].asString();
+        std::string cmd=configuration["tar-stream-command"].asString();
         for(std::string::size_type found=cmd.find(placeholder);
             found!=std::string::npos;
             found=cmd.find(placeholder)
@@ -689,9 +679,10 @@ namespace Orthanc
         archive.Expand(context.GetIndex());
 
         {
-          // Create a ZIP writer
+          // Create a TAR stream writer
           TarStreamWriter writer(cmd);
-          SftpArchiveWriterVisitor v(writer, context);
+          TarStreamWriterVisitor v(writer, context);
+		  // add all instances
           archive.Apply(v);
         }
 
@@ -871,7 +862,7 @@ namespace Orthanc
                                 id + ".zip");
   }
 
-  static void CreateSftpArchive(RestApiGetCall& call)
+  static void CreateTarArchive(RestApiPutCall& call)
   {
     ServerIndex& index = OrthancRestApi::GetIndex(call);
 
@@ -889,9 +880,9 @@ namespace Orthanc
       filename=
         tags.GetValue(DICOM_TAG_PATIENT_ID).GetContent();
       if(rs_type>=Orthanc::ResourceType_Study && idx.GetMainDicomTags(tags, id, rs_type, ResourceType_Study)){
-        filename+=
+        filename+="_"+
           tags.GetValue(DICOM_TAG_STUDY_DATE).GetContent().substr(2)+"_"+
-          tags.GetValue(DICOM_TAG_STUDY_TIME).GetContent();
+          tags.GetValue(DICOM_TAG_STUDY_TIME).GetContent().substr(0,6);
       }
     } else {
       filename=id;
@@ -902,7 +893,7 @@ namespace Orthanc
     ArchiveIndex archive(ResourceType_Patient);  // root
     archive.Add(OrthancRestApi::GetIndex(call), resource);
 
-    SftpArchiveWriterVisitor::Apply(call.GetOutput(),
+    TarStreamWriterVisitor::Apply(call.GetOutput(),
                                 OrthancRestApi::GetContext(call),
                                 archive,filename);
   }
@@ -930,9 +921,9 @@ namespace Orthanc
     Register("/studies/{id}/archive", CreateArchive);
     Register("/series/{id}/archive", CreateArchive);
 
-    Register("/patients/{id}/sftp-archive", CreateSftpArchive);
-    Register("/studies/{id}/sftp-archive", CreateSftpArchive);
-    Register("/series/{id}/sftp-archive", CreateSftpArchive);
+    Register("/patients/{id}/stream-archive", CreateTarArchive);
+    Register("/studies/{id}/stream-archive", CreateTarArchive);
+    Register("/series/{id}/stream-archive", CreateTarArchive);
 
     Register("/patients/{id}/media", CreateMedia);
     Register("/studies/{id}/media", CreateMedia);
