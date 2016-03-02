@@ -256,7 +256,9 @@ function FormatStudy(study, link, isReverse)
    FormatMainDicomTags(study.MainDicomTags, [
      "AccessionNumber",
      "StudyDescription",
-     "StudyDate"
+     "StudyDate",
+     "InstitutionName",
+     "StudyID"
    ]),
    study.Series.length
   );
