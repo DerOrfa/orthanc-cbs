@@ -448,7 +448,7 @@ function RefreshStudy()
     GetResource('/studies/' + $.mobile.pageData.uuid, function(study) {
       GetResource('/patients/' + study.ParentPatient, function(patient) {
         GetResource('/studies/' + $.mobile.pageData.uuid + '/series', function(series) {
-          SortOnDicomTag(series, 'SeriesNumber', false, true);
+          SortOnDicomTag(series, 'SeriesNumber', true, false);
 
           $('#study .patient-link').attr('href', '#patient?uuid=' + patient.ID);
           $('#study-info li').remove();
