@@ -315,11 +315,15 @@ namespace Orthanc
    *        "masks":["[A-Z]{2}[A-Z0-9][TX](?:[0-9]{6})?"],
    *        "replace" : [
    *            [[16, 16],"([A-Z]{2}[A-Z0-9][TX])(?:[0-9]{6})?","$1_"],
-   *            [[16,16384],".*",[56,16],"$&"]
+   *            [[16,16384],".*",[56,16],"$&"],
+   *            [[16,48],".*",""],
    *        ]
    *    }
    * }
    * \endcode
+   * first example will replace the value in place
+   * second will copy the value to another gag
+   * third will replace the value by an empty string, thus removing it
    * "formatting_name" and "formatting_id" will replace the PatientName and PatientID in the dicom.
    * They will default to "$1" if ommited
    */  
@@ -1675,12 +1679,16 @@ namespace Orthanc
 
           // do configured replacing
           for(std::list< _TagReplacer >::const_iterator i_repl= group.replacer.begin();i_repl!=group.replacer.end();i_repl++){
-            OFString src;
-            dset.findAndGetOFString(i_repl->src,src);
-            std::string dst=boost::regex_replace(std::string(src.c_str()), i_repl->mask,i_repl->formatting);
-            if(i_repl->src!=i_repl->dst || strcmp(src.c_str(),dst.c_str())){
-              LOG(INFO) << "(Re)placing " << i_repl->src << ":" << src << " into " << i_repl->dst << " as \"" << dst << "\"";
-              dset.putAndInsertOFStringArray(i_repl->dst,dst.c_str());
+            if(i_repl->formatting.empty()) {
+              dset.remove(i_repl->src);
+            } else {
+              OFString src;
+              dset.findAndGetOFString(i_repl->src,src);
+              std::string dst=boost::regex_replace(std::string(src.c_str()), i_repl->mask,i_repl->formatting);
+              if(i_repl->src!=i_repl->dst || strcmp(src.c_str(),dst.c_str())){
+                LOG(INFO) << "(Re)placing " << i_repl->src << ":" << src << " into " << i_repl->dst << " as \"" << dst << "\"";
+                dset.putAndInsertOFStringArray(i_repl->dst,dst.c_str());
+              }
             }
           }
 
