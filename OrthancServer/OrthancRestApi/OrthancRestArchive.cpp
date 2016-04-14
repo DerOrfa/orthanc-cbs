@@ -1,3 +1,5 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
+
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -848,15 +850,21 @@ namespace Orthanc
 
       virtual void Close(){}
       std::string WriteImage(const std::string &filename,const std::string &suffix){
-        isis::data::Image image(chunks);
-        if(!isis::data::IOFactory::write(image,filename,suffix.c_str()))
+        std::list<isis::data::Image> images=isis::data::IOFactory::chunkListToImageList(chunks);
+        if(images.size()>1){
+          throw OrthancException(ErrorCode_NotImplemented);
+        } else if(images.empty() || !isis::data::IOFactory::write(images.front(),filename,suffix.c_str())){
           std::cerr << "Failed to write " << filename << " as " << suffix << std::endl;
-        std::string name=
-          image.getPropertyAs<std::string>("subjectName")+"_"+
-          "S"+image.getPropertyAs<std::string>("sequenceNumber")+"_"+          
-          image.getPropertyAs<std::string>("sequenceDescription")+
-          "."+suffix;
-        return Toolbox::StripSpaces(Toolbox::ConvertToAscii(name));
+          throw OrthancException(ErrorCode_FileStorageCannotWrite);
+		} else {
+          std::string name=
+            images.front().getPropertyAs<std::string>("subjectName")+"_"+
+            "S"+images.front().getPropertyAs<std::string>("sequenceNumber")+"_"+
+            images.front().getPropertyAs<std::string>("sequenceDescription")+
+            "."+suffix;
+          return Toolbox::StripSpaces(Toolbox::ConvertToAscii(name));
+        }
+        return "";
       }
 
       virtual void AddInstance(const std::string& instanceId,
