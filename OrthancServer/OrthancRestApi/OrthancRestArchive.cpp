@@ -1,3 +1,5 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
+
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -37,6 +39,7 @@
 #include "../../Core/FileStorage/StorageAccessor.h"
 #include "../../Core/Compression/HierarchicalZipWriter.h"
 #include "../../Core/Compression/TarStreamWriter.h"
+#include "../../Core/FileStorage/ShadowWriter.h"
 #include "../../Core/HttpServer/FilesystemHttpSender.h"
 #include "../../Core/Logging.h"
 #include "../../Core/Uuid.h"
@@ -471,7 +474,7 @@ namespace Orthanc
           switch (level)
           {
             case ResourceType_Patient:
-              path = GetTag(tags, DICOM_TAG_PATIENT_ID) + " " + GetTag(tags, DICOM_TAG_PATIENT_NAME);
+              path = GetTag(tags, DICOM_TAG_PATIENT_ID);
               break;
 
             case ResourceType_Study:
@@ -663,11 +666,8 @@ namespace Orthanc
                         ArchiveIndex& archive, const std::string& filename)
       {
         
-        Json::Value configuration;
-        Configuration::GetConfiguration(configuration);
-        
         const std::string placeholder="{}";
-        std::string cmd=configuration["tar-stream-command"].asString();
+        std::string cmd=Configuration::GetGlobalStringParameter("tar-stream-command", "");
         for(std::string::size_type found=cmd.find(placeholder);
             found!=std::string::npos;
             found=cmd.find(placeholder)
@@ -682,6 +682,108 @@ namespace Orthanc
           // Create a TAR stream writer
           TarStreamWriter writer(cmd);
           TarStreamWriterVisitor v(writer, context);
+		  // add all instances
+          archive.Apply(v);
+        }
+
+        output.AnswerJson(Json::Value());
+      }
+    };
+
+    class ShadowWriterVisitor : public IArchiveVisitor
+    {
+    private:
+      ShadowWriter&  writer_;
+      ServerContext&            context_;
+
+      static std::string GetTag(const DicomMap& tags, const DicomTag& tag)
+      {
+        const DicomValue* v = tags.TestAndGetValue(tag);
+        if (v != NULL && !v->IsBinary() && !v->IsNull())
+        {
+          return v->GetContent();
+        }
+        else
+        {
+          return "";
+        }
+      }
+
+
+    public:
+      ShadowWriterVisitor(ShadowWriter& writer, ServerContext& context) : writer_(writer), context_(context)
+      {}
+
+      virtual void Open(ResourceType level, const std::string& publicId)
+      {
+        std::string path;
+
+        DicomMap tags;
+        if (context_.GetIndex().GetMainDicomTags(tags, publicId, level, level))
+        {
+          switch (level)
+          {
+            case ResourceType_Patient:
+              path = GetTag(tags, DICOM_TAG_PATIENT_ID);
+              break;
+
+            case ResourceType_Study:
+              path = GetTag(tags, DICOM_TAG_STUDY_DATE).substr(2)+"_"+GetTag(tags, DICOM_TAG_STUDY_TIME).substr(0,6);
+              break;
+
+            case ResourceType_Series:
+            {
+              path = std::string("S")+ GetTag(tags,DicomTag(0x0020,0x0011)) + "_" + GetTag(tags, DICOM_TAG_SERIES_DESCRIPTION);
+              break;
+            }
+            default:
+              throw OrthancException(ErrorCode_InternalError);
+          }
+        }
+        
+        static const char forbidden[]="/ ";
+        path = Toolbox::StripSpaces(Toolbox::ConvertToAscii(path));
+        for(std::string::size_type found=path.find_first_of(forbidden);
+            found!=std::string::npos;
+            found=path.find_first_of(forbidden,found)
+        ){
+            path.replace(found,1,"_");
+        }
+
+        if (path.empty())
+        {
+          path = std::string("Unknown ") + EnumerationToString(level);
+        }
+
+        writer_.OpenDirectory(path.c_str());
+      }
+
+      virtual void Close()
+      {
+        writer_.CloseDirectory();
+      }
+
+      virtual void AddInstance(const std::string& instanceId, const FileInfo& dicom)
+      {
+        if(dicom.GetCompressionType()!=CompressionType_None || dicom.GetContentType()!=FileContentType_Dicom)
+          throw OrthancException(ErrorCode_InternalError);
+        
+        DicomMap tags;
+        context_.GetIndex().GetMainDicomTags(tags, instanceId, ResourceType_Instance, ResourceType_Instance);
+        
+        writer_.AddFile(dicom,GetTag(tags,DICOM_TAG_SOP_INSTANCE_UID)+".ima");
+      }
+
+      static void Apply(RestApiOutput& output, ServerContext& context, ArchiveIndex& archive)
+      {
+        archive.Expand(context.GetIndex());
+        const std::string storageDirectoryStr = Configuration::GetGlobalStringParameter("StorageDirectory", "OrthancStorage");
+        const std::string shadowDirectoryStr = Configuration::GetGlobalStringParameter("shadow-root", "shadowStorage");
+
+        {
+          // Create a TAR stream writer
+          ShadowWriter writer(shadowDirectoryStr,storageDirectoryStr);
+          ShadowWriterVisitor v(writer, context);
 		  // add all instances
           archive.Apply(v);
         }
@@ -898,6 +1000,19 @@ namespace Orthanc
                                 archive,filename);
   }
 
+  static void CreateShadow(RestApiPutCall& call)
+  {
+    ServerIndex& index = OrthancRestApi::GetIndex(call);
+
+    std::string id = call.GetUriComponent("id", "");
+    ResourceIdentifiers resource(index, id);
+    
+    ArchiveIndex archive(ResourceType_Patient);  // root
+    archive.Add(OrthancRestApi::GetIndex(call), resource);
+
+    ShadowWriterVisitor::Apply(call.GetOutput(), OrthancRestApi::GetContext(call), archive);
+  }
+
   static void CreateMedia(RestApiGetCall& call)
   {
     ServerIndex& index = OrthancRestApi::GetIndex(call);
@@ -924,6 +1039,9 @@ namespace Orthanc
     Register("/patients/{id}/stream-archive", CreateTarArchive);
     Register("/studies/{id}/stream-archive", CreateTarArchive);
     Register("/series/{id}/stream-archive", CreateTarArchive);
+
+    Register("/studies/{id}/make-shadow", CreateShadow);
+    Register("/series/{id}/make-shadow", CreateShadow);
 
     Register("/patients/{id}/media", CreateMedia);
     Register("/studies/{id}/media", CreateMedia);
