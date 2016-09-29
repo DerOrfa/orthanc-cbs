@@ -186,11 +186,13 @@ else()
     -DHAVE_CONFIG_H=1
     )
 
-  if (EXISTS "${DCMTK_DIR}/config/cfunix.h")
-    set(DCMTK_CONFIGURATION_FILE "${DCMTK_DIR}/config/cfunix.h")
-  elseif (EXISTS "${DCMTK_DIR}/config/osconfig.h")  # This is for Arch Linux
-    set(DCMTK_CONFIGURATION_FILE "${DCMTK_DIR}/config/osconfig.h")
+    
+  if (EXISTS "/usr/include/dcmtk/config/cfunix.h")
+    set(DCMTK_CONFIGURATION_FILE "/usr/include/dcmtk/config/cfunix.h")
+  elseif (EXISTS "/usr/include/dcmtk/config/osconfig.h")  # This is for Arch Linux
+    set(DCMTK_CONFIGURATION_FILE "/usr/include/dcmtk/config/osconfig.h")
   else()
+	message(FATAL_ERROR "Neither /usr/include/dcmtk/config/cfunix.h nor /usr/include/dcmtk/config/osconfig.h exist")
     message(FATAL_ERROR "Please install libdcmtk*-dev")
   endif()
 

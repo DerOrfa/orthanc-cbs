@@ -107,6 +107,7 @@ set(ORTHANC_CORE_SOURCES
   Core/DicomFormat/DicomValue.cpp
   Core/Enumerations.cpp
   Core/FileStorage/FilesystemStorage.cpp
+  Core/FileStorage/ShadowWriter.cpp
   Core/FileStorage/StorageAccessor.cpp
   Core/HttpClient.cpp
   Core/HttpServer/BufferHttpSender.cpp
