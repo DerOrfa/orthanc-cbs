@@ -34,6 +34,7 @@ void ShadowWriter::OpenDirectory(const std::string& name)
   currentDir/=name;
   boost::system::error_code ec;
   fs::create_directory(m_shadow_root/currentDir,ec);
+  fs::permissions(m_shadow_root/currentDir, fs::add_perms|fs::group_read|fs::group_exe|fs::others_read|fs::others_exe);
   if(ec){
     LOG(ERROR) << "Failed to create " << m_shadow_root/currentDir << ":" << ec.message();
   }
@@ -66,8 +67,10 @@ void ShadowWriter::AddFile(const Orthanc::FileInfo& dicom, std::string target_na
 
     if(ec) // error handling for both
       LOG(ERROR) << "Failed to link " << path << " to " << p << ":" << ec.message();
-    else
+    else{
       instances++;
+      fs::permissions(p, fs::add_perms|fs::group_read|fs::others_read);
+    }
     
   } else
     LOG(ERROR) << path.native() << " does not exist";

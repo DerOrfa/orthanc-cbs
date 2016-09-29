@@ -27,9 +27,9 @@
 class ShadowWriter
 {
   boost::filesystem::path currentDir,m_shadow_root,m_storage_root;
-  bool symlink=false;
-  size_t instances=0,skipped=0;
 public:
+  bool symlink=false;
+  u_int64_t instances=0,skipped=0;
   ShadowWriter(boost::filesystem::path shadow_root, boost::filesystem::path storage_root);
   void CloseDirectory();
   void OpenDirectory(const std::string &name);

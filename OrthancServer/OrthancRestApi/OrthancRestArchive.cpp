@@ -779,6 +779,7 @@ namespace Orthanc
         archive.Expand(context.GetIndex());
         const std::string storageDirectoryStr = Configuration::GetGlobalStringParameter("StorageDirectory", "OrthancStorage");
         const std::string shadowDirectoryStr = Configuration::GetGlobalStringParameter("shadow-root", "shadowStorage");
+        Json::Value answer;
 
         {
           // Create a TAR stream writer
@@ -786,9 +787,12 @@ namespace Orthanc
           ShadowWriterVisitor v(writer, context);
 		  // add all instances
           archive.Apply(v);
+          answer["hardlinked"]= !writer.symlink;
+          answer["instances"]=Json::Value::UInt64(writer.instances);
+          answer["skipped"]=Json::Value::UInt64(writer.skipped);
         }
 
-        output.AnswerJson(Json::Value());
+        output.AnswerJson(answer);
       }
     };
 
@@ -1011,6 +1015,7 @@ namespace Orthanc
     archive.Add(OrthancRestApi::GetIndex(call), resource);
 
     ShadowWriterVisitor::Apply(call.GetOutput(), OrthancRestApi::GetContext(call), archive);
+    
   }
 
   static void CreateMedia(RestApiGetCall& call)
