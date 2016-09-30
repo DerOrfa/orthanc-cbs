@@ -77,11 +77,10 @@ namespace Orthanc
                           countInstances >= 65535);
 
 #warning fixme (isis-log and orthanc log are in conflict)
-//    LOG(INFO) 
-    std::clog << "Creating a ZIP file with " << countInstances << " files of size "
-              << (uncompressedSize / MEGA_BYTES) << "MB using the "
-              << (isZip64 ? "ZIP64" : "ZIP32") << " file format" 
-              << std::endl;
+    ::Orthanc::Logging::InternalLogger("INFO",  __FILE__, __LINE__) 
+      << "Creating a ZIP file with " << countInstances << " files of size "
+      << (uncompressedSize / MEGA_BYTES) << "MB using the "
+      << (isZip64 ? "ZIP64" : "ZIP32") << " file format";
 
     return isZip64;
   }
@@ -741,7 +740,7 @@ namespace Orthanc
               break;
             }
             default:
-              LOG(ERROR) << "level " << EnumerationToString(level) << " invalid, raising internal error";
+              ::Orthanc::Logging::InternalLogger("ERROR",  __FILE__, __LINE__) << "level " << EnumerationToString(level) << " invalid, raising internal error";
               throw OrthancException(ErrorCode_InternalError);
           }
         }
@@ -771,12 +770,12 @@ namespace Orthanc
       virtual void AddInstance(const std::string& instanceId, const FileInfo& dicom)
       {
         if(dicom.GetCompressionType()!=CompressionType_None){
-          LOG(ERROR) << "instance " << instanceId << " is comressed, can't be shadowed, raising internal error";
+          ::Orthanc::Logging::InternalLogger("ERROR",  __FILE__, __LINE__) << "instance " << instanceId << " is comressed, can't be shadowed, raising internal error";
           throw OrthancException(ErrorCode_InternalError);
         }
         
         if(dicom.GetContentType()!=FileContentType_Dicom){
-          LOG(ERROR) << "instance " << instanceId << " is no dicom, can't be shadowed, raising internal error";
+          ::Orthanc::Logging::InternalLogger("ERROR",  __FILE__, __LINE__) << "instance " << instanceId << " is no dicom, can't be shadowed, raising internal error";
           throw OrthancException(ErrorCode_InternalError);
         }
         
@@ -1138,7 +1137,7 @@ namespace Orthanc
 
     std::string id = call.GetUriComponent("id", "");
     ResourceIdentifiers resource(index, id);
-    
+
     ArchiveIndex archive(ResourceType_Patient);  // root
     archive.Add(OrthancRestApi::GetIndex(call), resource);
 
