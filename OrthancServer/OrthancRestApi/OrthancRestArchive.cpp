@@ -741,6 +741,7 @@ namespace Orthanc
               break;
             }
             default:
+              LOG(ERROR) << "level " << EnumerationToString(level) << " invalid, raising internal error";
               throw OrthancException(ErrorCode_InternalError);
           }
         }
@@ -769,8 +770,15 @@ namespace Orthanc
 
       virtual void AddInstance(const std::string& instanceId, const FileInfo& dicom)
       {
-        if(dicom.GetCompressionType()!=CompressionType_None || dicom.GetContentType()!=FileContentType_Dicom)
+        if(dicom.GetCompressionType()!=CompressionType_None){
+          LOG(ERROR) << "instance " << instanceId << " is comressed, can't be shadowed, raising internal error";
           throw OrthancException(ErrorCode_InternalError);
+        }
+        
+        if(dicom.GetContentType()!=FileContentType_Dicom){
+          LOG(ERROR) << "instance " << instanceId << " is no dicom, can't be shadowed, raising internal error";
+          throw OrthancException(ErrorCode_InternalError);
+        }
         
         DicomMap tags;
         context_.GetIndex().GetMainDicomTags(tags, instanceId, ResourceType_Instance, ResourceType_Instance);
