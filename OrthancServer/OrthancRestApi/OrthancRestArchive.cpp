@@ -770,7 +770,7 @@ namespace Orthanc
       virtual void AddInstance(const std::string& instanceId, const FileInfo& dicom)
       {
         if(dicom.GetCompressionType()!=CompressionType_None){
-          ::Orthanc::Logging::InternalLogger("ERROR",  __FILE__, __LINE__) << "instance " << instanceId << " is comressed, can't be shadowed, raising internal error";
+          ::Orthanc::Logging::InternalLogger("ERROR",  __FILE__, __LINE__) << "instance " << instanceId << " is compressed, can't be shadowed, raising internal error";
           throw OrthancException(ErrorCode_InternalError);
         }
         
