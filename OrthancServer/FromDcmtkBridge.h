@@ -58,7 +58,10 @@ namespace Orthanc
                                       unsigned int maxMultiplicity);
     
     static void RegisterImageGroups(const Json::Value& configuration);
-    static void RegisterReplace(const Json::Value& replace_cfg, std::list< _TagReplacer>& replacer_list, const std::string& location);
+    static void RegisterGlobalReplace(const Json::Value& configuration);
+
+    static int UpdateMapping(const std::string& group, const std::pair<std::string, std::string> map);
+    static bool GetReplace(const Json::Value& replace_cfg, const std::string& location, _TagReplacer &dest);
 
 
     static Encoding DetectEncoding(const DcmDataset& dataset);

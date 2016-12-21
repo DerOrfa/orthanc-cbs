@@ -59,6 +59,7 @@ void ShadowWriter::AddFile(const Orthanc::FileInfo& dicom, std::string target_na
       fs::create_hard_link(path,p,ec);
       if(ec==boost::system::errc::cross_device_link){ // cant do hardlink, try again with symlink
         symlink=true;
+        LOG(WARNING) << "Cannot hardlink " << path << " to " << p << "("  << ec.message() <<"). Falling back to symlink.";
         AddFile(dicom,target_name);
         return;
       } 

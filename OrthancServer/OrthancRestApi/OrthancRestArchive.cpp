@@ -963,6 +963,7 @@ namespace Orthanc
       std::string WriteImage(const std::string &filename,const std::string &suffix){
         std::list<isis::data::Image> images=isis::data::IOFactory::chunkListToImageList(chunks);
         if(images.size()>1){
+          ::Orthanc::Logging::InternalLogger("ERROR",  __FILE__, __LINE__) << "The conversion resulted in multiple files. Aborting, as they cant be sent via rest-reply";
           throw OrthancException(ErrorCode_NotImplemented);
         } else if(images.empty() || !isis::data::IOFactory::write(images.front(),filename,suffix.c_str())){
           std::cerr << "Failed to write " << filename << " as " << suffix << std::endl;

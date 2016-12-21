@@ -1,4 +1,6 @@
-﻿/**
+﻿// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
+
+/**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
  * Department, University Hospital of Liege, Belgium
@@ -1027,6 +1029,11 @@ namespace Orthanc
     result = configuration_;
   }
 
+  void Configuration::SetMapping(std::string name,const Json::Value& mapping)
+  {
+    boost::recursive_mutex::scoped_lock lock(globalMutex_);
+    configuration_[name]=mapping;
+  }
 
   void Configuration::FormatConfiguration(std::string& result)
   {

@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -129,6 +130,39 @@ namespace Orthanc
     call.GetOutput().AnswerBuffer(result, "text/plain");
   }
 
+  static void UpdateMap(RestApiPostCall& call)
+  {
+
+    ServerContext& context = OrthancRestApi::GetContext(call);
+
+    std::string scontent;
+    call.BodyToString(scontent);
+
+    Json::Reader reader;
+    Json::Value jcontent,answer,failed(Json::arrayValue);
+
+    int cnt=0;
+    if(reader.parse(scontent, jcontent)){
+      for(Json::Value::iterator imappper=jcontent.begin();imappper!=jcontent.end();imappper++){
+        for(Json::Value::iterator imap=(*imappper).begin();imap!=(*imappper).end();imap++){
+          int result=FromDcmtkBridge::UpdateMapping(imappper.memberName(),std::make_pair(imap.memberName(),(*imap).asString()));
+          if(result==-1){//"Failed to update mapping for " << imappper.memberName();
+            failed.append(imappper.memberName());
+            break;
+          } else
+            cnt+=result;
+        }
+        answer["updated"][imappper.memberName()]=cnt;
+      }
+    } else {
+      call.GetOutput().AnswerBuffer(std::string("Failed to parse ")+scontent+"\nError was: "+reader.getFormattedErrorMessages(), "text/plain");
+    }
+    if(!failed.empty())
+      answer["failed"]=failed;
+
+    call.GetOutput().AnswerJson(answer);
+  }
+
   static void GetNowIsoString(RestApiGetCall& call)
   {
     call.GetOutput().AnswerBuffer(Toolbox::GetNowIsoString(), "text/plain");
@@ -256,6 +290,7 @@ namespace Orthanc
     Register("/tools/generate-uid", GenerateUid);
     Register("/tools/execute-script", ExecuteScript);
     Register("/tools/now", GetNowIsoString);
+    Register("/tools/update-mapping", UpdateMap);
     Register("/tools/dicom-conformance", GetDicomConformanceStatement);
 
     Register("/plugins", ListPlugins);

@@ -94,22 +94,37 @@
 
 #include <boost/math/special_functions/round.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/shared_ptr.hpp>
 #include <dcmtk/dcmdata/dcostrmb.h>
 #include <dcmtk/dcmdata/dcostrmf.h>
+
+#include <iostream>
 
 struct _TagReplacer{
   boost::regex mask;
   std::string formatting;
-  DcmTagKey src,dst;
+  DcmTagKey src;
+  std::list<DcmTagKey> dst;
+  std::map<std::string,std::string> map;
 };
 struct _ImageGroup{
   std::list<boost::regex> masks;
-  std::list<_TagReplacer> replacer;
+  std::list<DcmTagKey> deleter;
+  _TagReplacer replacer;
   DcmTagKey tag;
-
 };
 DcmTagKey json2dcmtag(const Json::Value &val){
   return DcmTagKey(val[0].asUInt(),val[1].asUInt());
+}
+std::list<DcmTagKey> json2dcmtaglist(const Json::Value &val){
+  std::list<DcmTagKey> ret;
+  if(val[0].isArray()){
+    for(int i=0;i<val.size();i++){
+      ret.push_back(json2dcmtag(val[i]));
+    }
+  } else
+    ret.push_back(json2dcmtag(val));
+  return ret;
 }
 
 static std::map<std::string,_ImageGroup> _image_groups;
@@ -169,7 +184,6 @@ namespace Orthanc
       throw OrthancException(ErrorCode_InternalError);
     }
   }
-                            
 #endif
 
 
@@ -336,59 +350,78 @@ namespace Orthanc
     {
       return;
     }
-    std::list< _TagReplacer > global_replace;
-    if (configuration.isMember("replace"))
-      RegisterReplace(configuration["replace"],global_replace,"##GLOBAL_REPLACE##");
-
 
     Json::Value::Members groups=configuration["ImageGroups"].getMemberNames();
     for(Json::Value::Members::iterator i_gr=groups.begin();
         i_gr!=groups.end();i_gr++)
     {
       const Json::Value &group_cfg= configuration["ImageGroups"][*i_gr];
-      _ImageGroup &group=_image_groups[*i_gr];
+      _ImageGroup group;
       if(group_cfg.isMember("masks")){
         for(Json::ValueConstIterator i_mask=group_cfg["masks"].begin(); i_mask!=group_cfg["masks"].end(); i_mask++)
           group.masks.push_back(boost::regex((*i_mask).asCString()));
 
         group.tag=group_cfg.isMember("masktag") ?
           json2dcmtag(group_cfg["masktag"]):DcmTagKey(0x0010,0x0010); //PatientName
+
+        if (group_cfg.isMember("replace"))
+          GetReplace(group_cfg["replace"],*i_gr,group.replacer);
+
+        if (group_cfg.isMember("delete")){
+          group.deleter=json2dcmtaglist(group_cfg["delete"]);
+        }
+
         LOG(INFO) << "Adding group " << *i_gr << " with " << group.masks.size() << " masks";
+        _image_groups[*i_gr]=group;
       } else
         LOG(WARNING) << "Image group \"" << *i_gr << "\" has no mask, and is therefore invalid";
-      group.replacer=global_replace;
-      if (group_cfg.isMember("replace"))
-        RegisterReplace(group_cfg["replace"],group.replacer,*i_gr);
+    }
+  }
+  int FromDcmtkBridge::UpdateMapping(const std::string& group, const std::pair<std::string, std::string> new_map)
+  {
+    std::map< std::string, _ImageGroup >::iterator found = _image_groups.find(group);
+    if(found==_image_groups.end()){
+      LOG(ERROR) << "Image group \"" << group << "\" does not exist";
+      return -1;
+    } else {
+      std::map<std::string, std::string> &dst=found->second.replacer.map;
+      std::map<std::string, std::string>::iterator key_found=dst.find(new_map.first);
+      if(key_found!=dst.end() && key_found->second==new_map.second){
+        return 0;
+      } else {
+        // @todo do locking here
+        dst[new_map.first]=new_map.second;
+        return 1;
+      }
     }
   }
 
-  void FromDcmtkBridge::RegisterReplace(const Json::Value& replace_cfg, std::list< _TagReplacer >& replacer_list,const std::string &location)
+  bool FromDcmtkBridge::GetReplace(const Json::Value& replace_cfg, const std::string& location, _TagReplacer &dest)
   {
-    if(replace_cfg.type() != Json::arrayValue){
-      LOG(ERROR) << "Replace in \"" << location << "\" is not an array";
-      return;
+    if(replace_cfg.type() != Json::objectValue){
+      LOG(ERROR) << "Replace in \"" << location << "\" is not an object";
+      return false;
     }
-    for(Json::ValueConstIterator i_repl=replace_cfg.begin(); i_repl!=replace_cfg.end(); i_repl++){
-      Json::Value repl_cfg=*i_repl;
-      if(repl_cfg[0].isArray() && repl_cfg[1].isString()){
-        _TagReplacer replacer;
-        replacer.src=json2dcmtag(repl_cfg[0]);
-        replacer.mask=boost::regex(repl_cfg[1].asCString());
-        if(repl_cfg.size()>3){
-          replacer.dst = json2dcmtag(repl_cfg[2]);
-          replacer.formatting = repl_cfg[3].asCString();
-          LOG(INFO) << "Adding replacer " << replacer.src << " \"" << replacer.mask << "\"=>" << replacer.dst << "\"" << replacer.formatting << "\"";
-        } else {
-          replacer.dst = replacer.src;
-          replacer.formatting = (repl_cfg.size() > 2 && repl_cfg[2].isString()) ?
-            repl_cfg[2].asCString():"$1";
-          LOG(INFO) << "Adding inplace-replacer for " << replacer.src << " \"" << replacer.mask << "/" << replacer.formatting << "\"";
-        }
-        replacer_list.push_back(replacer);
-      } else {
-        LOG(ERROR) << "Ignoring invalid replacer in " << location;
+
+    _TagReplacer ret;
+    ret.src=json2dcmtag(replace_cfg["source"][0]);
+    ret.mask=boost::regex(replace_cfg["source"][1].asString());
+    ret.dst = json2dcmtaglist(replace_cfg["dest"]);
+
+    if(replace_cfg.isMember("map")){
+      for(Json::ValueConstIterator i=replace_cfg["map"].begin();i!=replace_cfg["map"].end();i++){
+        ret.map[i.memberName()]=(*i).asString();
       }
+      LOG(INFO) << "Adding mapping replacer for " << location;
+    } else if(replace_cfg.isMember("formatting")){
+      ret.formatting=replace_cfg["formatting"].asString();
+      LOG(INFO) << "Adding formatting replacer " << ret.formatting << " for " << location;
+    } else {
+      LOG(ERROR) << "Ignoring invalid replacer in " << location << " (it has neigther \"formatting\" nor \"map\")";
+      return false;
     }
+    dest=ret;
+    return true;
   }
 
 
@@ -1677,17 +1710,29 @@ namespace Orthanc
         if(boost::regex_match(key_val.begin(),key_val.end(), what, *r)){ // found a group
           LOG(INFO) << "Tag " << group.tag << ":" << key_val << " matched group " << name;
 
+          // do configured deletion
+          for(std::list<DcmTagKey>::const_iterator i=group.deleter.begin();i!=group.deleter.end();i++){
+            dset.remove(*i);
+          }
+
           // do configured replacing
-          for(std::list< _TagReplacer >::const_iterator i_repl= group.replacer.begin();i_repl!=group.replacer.end();i_repl++){
-            if(i_repl->formatting.empty()) {
-              dset.remove(i_repl->src);
-            } else {
-              OFString src;
-              dset.findAndGetOFString(i_repl->src,src);
-              std::string dst=boost::regex_replace(std::string(src.c_str()), i_repl->mask,i_repl->formatting);
-              if(i_repl->src!=i_repl->dst || strcmp(src.c_str(),dst.c_str())){
-                LOG(INFO) << "(Re)placing " << i_repl->src << ":" << src << " into " << i_repl->dst << " as \"" << dst << "\"";
-                dset.putAndInsertOFStringArray(i_repl->dst,dst.c_str());
+          OFString src;
+          dset.findAndGetOFString(group.replacer.src,src);
+          if(!group.replacer.map.empty()){
+            const std::string key=boost::regex_replace(std::string(src.c_str()), group.replacer.mask,"$1");
+            std::map< std::string, std::string >::const_iterator found=group.replacer.map.find(key);
+            if(found!=group.replacer.map.end()){
+              for(std::list<DcmTagKey>::const_iterator d=group.replacer.dst.begin(); d!=group.replacer.dst.end(); d++){
+                LOG(INFO) << "(Re)placing " << group.replacer.src << ":" << src << " into " << *d << " as \"" << found->second << "\"";
+                dset.putAndInsertOFStringArray(*d,found->second.c_str());
+              }
+            }
+          } else if(!group.replacer.formatting.empty()) {
+            const std::string r_result=boost::regex_replace(std::string(src.c_str()), group.replacer.mask,group.replacer.formatting);
+            for(std::list<DcmTagKey>::const_iterator d=group.replacer.dst.begin(); d!=group.replacer.dst.end(); d++){
+              if(group.replacer.src!= *d || strcmp(src.c_str(),r_result.c_str())){
+                LOG(INFO) << "(Re)placing " << group.replacer.src << ":" << src << " into " << *d << " as \"" << r_result << "\"";
+                dset.putAndInsertOFStringArray(*d,r_result.c_str());
               }
             }
           }
@@ -1699,11 +1744,12 @@ namespace Orthanc
           dset.findAndGetOFString(DcmTagKey(0x0008,0x0030),studyTime);
 
           if(!patientID.empty() && !studyDate.empty()){
-            return dset.putAndInsertOFStringArray(DcmTagKey(0x0008,0x1030),patientID+"_"+studyDate.substr(2)+"_"+studyTime.substr(0,6)).good();
+            dset.putAndInsertOFStringArray(DcmTagKey(0x0008,0x1030),patientID+"_"+studyDate.substr(2)+"_"+studyTime.substr(0,6));
           }
         }
       }
     }
-    return dset.putAndInsertOFStringArray(DcmTagKey(0x0038, 0x0010),OFString("unmatched")).good(); //fallback to "fail-storage"
+    //@todo fallback to "fail-storage"
+    return true;
   }
 }
