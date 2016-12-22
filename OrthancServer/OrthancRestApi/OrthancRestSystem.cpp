@@ -130,7 +130,7 @@ namespace Orthanc
     call.GetOutput().AnswerBuffer(result, "text/plain");
   }
 
-  static void UpdateMap(RestApiPostCall& call)
+  static void UpdateMap(RestApiPutCall& call)
   {
 
     ServerContext& context = OrthancRestApi::GetContext(call);

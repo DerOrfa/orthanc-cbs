@@ -1726,6 +1726,8 @@ namespace Orthanc
                 LOG(INFO) << "(Re)placing " << group.replacer.src << ":" << src << " into " << *d << " as \"" << found->second << "\"";
                 dset.putAndInsertOFStringArray(*d,found->second.c_str());
               }
+            } else {
+              LOG(INFO) << "There is a mapping set for " << group.replacer.src << " in " << name << " but \"" << key << "\" was not found";
             }
           } else if(!group.replacer.formatting.empty()) {
             const std::string r_result=boost::regex_replace(std::string(src.c_str()), group.replacer.mask,group.replacer.formatting);

@@ -629,12 +629,17 @@ namespace Orthanc
     }
 
 
-    // Authenticate this connection if its a writing request (anything but GET), or if authentication is enabled anyways
-    if ((strcmp(request->request_method, "GET") || that->IsAuthenticationEnabled()) && !IsAccessGranted(*that, headers))
-    {
-      LOG(INFO) << "Rejecting unauthorized \"" << request->request_method << "\"-request";
-      output.SendUnauthorized(ORTHANC_REALM);
-      return;
+    // Authenticate this connection if its a modifying request (anything but GET or PUT), or if authentication is enabled anyways
+    if(
+      (strcmp(request->request_method, "GET")==0 && strcmp(request->request_method, "PUT")==0) ||
+      that->IsAuthenticationEnabled()
+    ){
+      LOG(INFO) << "Checking for authentication for \"" << request->request_method << "\" request";
+      if (!IsAccessGranted(*that, headers) ){
+        LOG(INFO) << "Rejecting unauthorized \"" << request->request_method << "\"-request";
+        output.SendUnauthorized(ORTHANC_REALM);
+        return;
+      }
     }
 
 
