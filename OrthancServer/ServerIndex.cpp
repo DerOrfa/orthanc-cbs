@@ -1,3 +1,4 @@
+// kate: space-indent on; replace-tabs on; tab-indents off; indent-width 2; indent-mode cstyle;
 /**
  * Orthanc - A Lightweight, RESTful DICOM Store
  * Copyright (C) 2012-2015 Sebastien Jodogne, Medical Physics
@@ -1438,27 +1439,48 @@ namespace Orthanc
     return db_.IsArchived(id);
   }
 
-  void ServerIndex::SetArchived(const std::string& publicId,
-                                        bool IsArchived)
+  void ServerIndex::SetArchived(const std::string& publicId, bool IsArchived)
   {
-    boost::mutex::scoped_lock lock(mutex_);
-    Transaction transaction(*this);
-
-    // Lookup for the requested resource
-    int64_t id;
     ResourceType type;
-    if (!db_.LookupResource(id, type, publicId))
     {
-      throw OrthancException(ErrorCode_ParameterOutOfRange);
+      boost::mutex::scoped_lock lock(mutex_);
+      Transaction transaction(*this);
+
+      // Lookup for the requested resource
+      int64_t id;
+      if (!db_.LookupResource(id, type, publicId))
+      {
+        throw OrthancException(ErrorCode_ParameterOutOfRange);
+      }
+
+      db_.SetArchived(id, IsArchived);
+      transaction.Commit(0);
     }
 
-    db_.SetArchived(id, IsArchived);
-    transaction.Commit(0);
+    std::ostringstream plustext;
+    if(type != ResourceType_Instance){
+      std::list<std::string> instances;
+      GetChildInstances(instances, publicId);
+      plustext << " (plus " << instances.size() << " children)";
+      boost::mutex::scoped_lock lock(mutex_);
+      Transaction transaction(*this);
+      for (std::list<std::string>::const_iterator it = instances.begin();it != instances.end(); ++it)
+      {
+        int64_t id;
+        if (!db_.LookupResource(id, type, *it))
+        {
+          throw OrthancException(ErrorCode_ParameterOutOfRange);
+        }
+        db_.SetArchived(id, IsArchived);
+      }
+      transaction.Commit(0);
+      
+    }
 
     if (IsArchived)
-      LOG(INFO) << "Patient " << publicId << " has been marked as archived";
+      LOG(INFO) << publicId << " has been marked as archived" << plustext.str();
     else
-      LOG(INFO) << "Patient " << publicId << " has been marked as archived";
+      LOG(INFO) << publicId << " has been marked as not archived" << plustext.str();
   }
 
   void ServerIndex::SetProtectedPatient(const std::string& publicId,

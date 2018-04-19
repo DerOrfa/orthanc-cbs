@@ -265,7 +265,10 @@ function FormatStudy(study, link, isReverse)
      "StudyDescription",
      "StudyDate",
      "InstitutionName",
-     "StudyID"
+     "StudyID",
+	 "StudyInstanceUID",
+	 "RequestedProcedureDescription",
+	 "ReferringPhysicianName"
    ]),
    study.Series.length
   );

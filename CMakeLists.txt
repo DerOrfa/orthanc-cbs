@@ -14,7 +14,7 @@ set(ORTHANC_VERSION "mainline")
 #   * Orthanc 0.9.5 -> mainline      = version 6
 set(ORTHANC_DATABASE_VERSION 6)
 
-find_package(ISIS)
+find_package(ISIS COMPONENTS IsisMath)
 
 ADD_DEFINITIONS(-D_ENABLE_LOG=1)
 ADD_DEFINITIONS(-D_ENABLE_DEBUG=0)
